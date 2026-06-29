@@ -29,8 +29,8 @@ class AgentOrchestrator:
         existed_before_get_or_create = conversation_id is not None and conversation_exists(conversation_id)
         conv = get_or_create_conversation(conversation_id, user_id)
         is_new_conversation = not existed_before_get_or_create
-        pii_clean, pii_redacted = redact_pii(message) if settings.pii_redaction_enabled else (message, False)
-        clean, credential_redacted = redact_credentials(pii_clean)
+        credential_clean, credential_redacted = redact_credentials(message)
+        clean, pii_redacted = redact_pii(credential_clean) if settings.pii_redaction_enabled else (credential_clean, False)
         was_redacted = pii_redacted or credential_redacted
         if settings.guardrails_enabled:
             decision = policy_engine.evaluate(clean, evaluate_message(clean))

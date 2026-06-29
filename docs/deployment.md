@@ -39,3 +39,12 @@ Run migrations in order from `apps/api/supabase/migrations`, then run `apps/api/
 ### Mock mode
 
 Mock mode is the supported RC1 default and works without paid API keys. Keep `LLM_PROVIDER=mock` unless a provider plugin has been explicitly configured and tested.
+
+## Vercel + Render + Supabase free-tier deployment
+
+1. **Supabase:** create a free project and run all SQL files in `apps/api/supabase/migrations` in order.
+2. **Render API:** create a free web service from this repo with start command `cd apps/api && uvicorn app.main:app --host 0.0.0.0 --port $PORT` and env vars from `docs/environment.md`.
+3. **Vercel Web:** create a free Vercel project for `apps/web`; set `NEXT_PUBLIC_API_BASE_URL` to the Render API URL.
+4. **Auth:** send `X-FinGuard-Role`/`X-FinGuard-Actor` from any admin integration while the free-tier header shim is in use.
+5. **Mock LLM:** keep `LLM_PROVIDER=mock` to avoid paid APIs. Non-mock providers safely report degraded/unconfigured status if keys are missing.
+6. **Validation:** check `/api/v1/health`, run customer chat, and verify admin routes require auth in production.

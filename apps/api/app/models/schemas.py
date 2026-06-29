@@ -15,7 +15,7 @@ class Conversation(BaseModel):
 class ConversationMessage(BaseModel):
     id: str; conversation_id: str; role: str; content: str; created_at: str
 class Ticket(BaseModel):
-    id: str; conversation_id: str; summary: str; status: str = "open"; priority: str = "normal"
+    id: str; conversation_id: str; summary: str; status: str = "open"; priority: str = "normal"; assignee: str | None = None; internal_notes: list[str] = []
 class KnowledgeArticleBase(BaseModel):
     title: str; body: str; tags: list[str] = []
 class KnowledgeArticleCreate(KnowledgeArticleBase):
@@ -39,6 +39,8 @@ class TicketUpdate(BaseModel):
     status: str | None = Field(default=None, pattern="^(open|pending|resolved|closed|escalated)$")
     priority: str | None = Field(default=None, pattern="^(low|normal|high|urgent)$")
     summary: str | None = Field(default=None, min_length=1, max_length=1000)
+    assignee: str | None = Field(default=None, max_length=120)
+    internal_note: str | None = Field(default=None, min_length=1, max_length=1000)
 
 class KnowledgeSearchResponse(BaseModel):
     query: str
