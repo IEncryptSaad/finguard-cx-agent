@@ -14,13 +14,13 @@ packages/
 
 ## Features
 
-- Next.js customer chat UI and admin dashboard shell.
+- Next.js customer chat UI, conversation-aware ticket creation, and responsive admin dashboard with conversation, ticket, audit, knowledge, and settings panels.
 - FastAPI backend with typed Pydantic request/response models.
-- Mock LLM provider enabled by default; no paid APIs required.
+- Mock LLM provider enabled by default; no paid APIs required. Disabled-by-default OpenAI, Anthropic, Gemini, Groq, Ollama, and OpenRouter provider plugins can be enabled by environment variables.
 - Provider-agnostic LLM adapter boundary for future OpenAI, Anthropic, local, or enterprise providers.
 - PII redaction, guardrails, audit logging, human handoff, and support ticket workflows.
 - RBAC-ready auth structure.
-- Supabase-ready repository boundary for later database/auth/realtime persistence.
+- Supabase-ready schema, migrations, seed data, and repository boundary for database/auth/realtime persistence.
 - Lifecycle event automation foundation.
 - Shared schemas and TypeScript types for frontend/backend alignment.
 
@@ -68,7 +68,7 @@ Frontend environment variables live in `apps/web/.env.example`:
 
 ## Architecture notes
 
-Requests enter the FastAPI router and are delegated to `AgentOrchestrator`. The orchestrator redacts PII, applies guardrails, calls the configured LLM provider, records audit events, and creates high-priority tickets when human handoff is required. Storage and external integrations are intentionally behind narrow service boundaries so the MVP can later add paid LLMs, RAG, multi-agent routing, enterprise tools, analytics, and client-specific workflows.
+Requests enter the versioned FastAPI router and are delegated to `AgentOrchestrator`. The orchestrator records conversation memory, redacts PII, applies guardrails and policy checks, renders prompt templates, calls the configured provider plugin, records audit events, and creates high-priority tickets when human handoff is required. Storage and external integrations are intentionally behind narrow service and plugin boundaries so premium AI providers, tools, integrations, knowledge sources, auth providers, analytics, and notifications can be installed without architectural rewrites. OpenAPI docs are available at `/api/v1/docs`.
 
 ## Free-tier deployment
 
@@ -76,3 +76,7 @@ Requests enter the FastAPI router and are delegated to `AgentOrchestrator`. The 
 - Deploy `apps/web` to a free Next.js platform and set `NEXT_PUBLIC_API_BASE_URL` to the backend URL.
 - Keep `LLM_PROVIDER=mock` until a real provider is intentionally configured.
 - Add Supabase free-tier credentials only when persistent storage is needed.
+
+## Supabase schema
+
+Run `apps/api/supabase/migrations/001_mvp_schema.sql` and `apps/api/supabase/seed.sql` in Supabase SQL editor for persistent free-tier deployments.
