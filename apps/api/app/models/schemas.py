@@ -1,5 +1,5 @@
 from enum import StrEnum
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 class Role(StrEnum):
     admin = "admin"; agent = "agent"; customer = "customer"
 class ErrorResponse(BaseModel):
@@ -75,6 +75,28 @@ class WorkflowCreate(BaseModel):
     actions: list[dict] = []
     retry_policy: dict = {"max_attempts": 3, "backoff_seconds": 30}
     status: str = Field(default="draft", pattern="^(draft|active|paused|archived)$")
+
+    @field_validator("retry_policy")
+    @classmethod
+    def validate_retry_policy(cls, retry_policy: dict) -> dict:
+        if "max_attempts" not in retry_policy:
+            return retry_policy
+
+        max_attempts = retry_policy["max_attempts"]
+        if isinstance(max_attempts, bool):
+            raise ValueError("retry_policy.max_attempts must be an integer between 0 and 10")
+
+        try:
+            attempts = int(max_attempts)
+        except (TypeError, ValueError):
+            raise ValueError("retry_policy.max_attempts must be an integer between 0 and 10")
+
+        if attempts != max_attempts and str(attempts) != str(max_attempts):
+            raise ValueError("retry_policy.max_attempts must be an integer between 0 and 10")
+        if attempts < 0 or attempts > 10:
+            raise ValueError("retry_policy.max_attempts must be an integer between 0 and 10")
+
+        return {**retry_policy, "max_attempts": attempts}
 class Workflow(WorkflowCreate):
     id: str; created_at: str; updated_at: str
 class WorkflowExecution(BaseModel):

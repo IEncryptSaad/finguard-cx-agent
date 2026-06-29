@@ -333,6 +333,16 @@ def test_api_contract_errors_are_standardized_for_validation_and_missing_resourc
     assert missing_ticket.status_code == 404
     assert missing_ticket.json()["code"] == "http_error"
 
+    unmatched = client.get("/api/v1/nope")
+    assert unmatched.status_code == 404
+    assert unmatched.json()["code"] == "http_error"
+    assert unmatched.json()["message"] == "Not Found"
+
+    method_not_allowed = client.put("/api/v1/workflows", json={})
+    assert method_not_allowed.status_code == 405
+    assert method_not_allowed.json()["code"] == "http_error"
+    assert method_not_allowed.json()["message"] == "Method Not Allowed"
+
 
 def test_knowledge_upload_rejects_unsupported_and_oversized_files():
     client = TestClient(app)
@@ -351,9 +361,24 @@ def test_knowledge_upload_rejects_unsupported_and_oversized_files():
     assert oversized.status_code == 413
 
 
+def test_workflow_invalid_retry_policy_is_rejected_at_creation():
+    client = TestClient(app)
+
+    response = client.post("/api/v1/workflows", json={
+        "name": "Bad retry workflow",
+        "trigger": "webhook_received",
+        "actions": [{"type": "notify_admin"}],
+        "retry_policy": {"max_attempts": "two"},
+        "status": "active",
+    })
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"
+
+
 def test_workflow_failures_are_recorded_without_crashing():
     from app.models.schemas import WorkflowCreate
-    from app.services.workflows import create_workflow, run_workflow
+    from app.services.workflows import _WORKFLOWS, create_workflow, run_workflow
 
     missing = run_workflow("missing-workflow-id", {"source": "contract-test"})
     assert missing.status == "failed"
@@ -372,6 +397,21 @@ def test_workflow_failures_are_recorded_without_crashing():
     assert failed.status == "failed"
     assert failed.attempts == 2
     assert failed.error
+
+    malformed = create_workflow(
+        WorkflowCreate(
+            name="Malformed persisted retry policy",
+            trigger="webhook_received",
+            status="active",
+            actions=[{"type": "notify_admin"}],
+        )
+    )
+    _WORKFLOWS[malformed.id] = malformed.model_copy(update={"retry_policy": {"max_attempts": "two"}})
+
+    malformed_execution = run_workflow(malformed.id, {"source": "contract-test"})
+    assert malformed_execution.status == "failed"
+    assert malformed_execution.attempts == 1
+    assert malformed_execution.error == "Invalid retry_policy.max_attempts"
 
 
 def test_openapi_is_versioned_and_documents_error_schema():

@@ -11,6 +11,24 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+
+def _retry_attempts(retry_policy: dict) -> tuple[int, str | None]:
+    max_attempts = retry_policy.get("max_attempts", 1) or 1
+    if isinstance(max_attempts, bool):
+        return 1, "Invalid retry_policy.max_attempts"
+
+    try:
+        attempts = int(max_attempts)
+    except (TypeError, ValueError):
+        return 1, "Invalid retry_policy.max_attempts"
+
+    if attempts != max_attempts and str(attempts) != str(max_attempts):
+        return 1, "Invalid retry_policy.max_attempts"
+    if attempts < 0 or attempts > 10:
+        return 1, "Invalid retry_policy.max_attempts"
+
+    return attempts, None
+
 def create_workflow(payload: WorkflowCreate) -> Workflow:
     now = _now()
     wf = Workflow(
@@ -51,8 +69,11 @@ def run_workflow(workflow_id: str, context: dict | None = None) -> WorkflowExecu
         log_event("workflow.failed", {"workflow_id": workflow_id, "reason": "not_found"})
         return execution
 
-    attempts = int(wf.retry_policy.get("max_attempts", 1) or 1)
-    if wf.status != "active":
+    attempts, retry_error = _retry_attempts(wf.retry_policy)
+    if retry_error is not None:
+        status = "failed"
+        error = retry_error
+    elif wf.status != "active":
         status = "skipped"
         error = None
     elif any(not isinstance(action, dict) or "type" not in action for action in wf.actions):
