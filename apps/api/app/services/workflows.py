@@ -13,8 +13,11 @@ def _now() -> str:
 
 
 def _retry_attempts(retry_policy: dict) -> tuple[int, str | None]:
-    max_attempts = retry_policy.get("max_attempts", 1) or 1
-    if isinstance(max_attempts, bool):
+    if "max_attempts" not in retry_policy or retry_policy["max_attempts"] is None:
+        return 1, None
+
+    max_attempts = retry_policy["max_attempts"]
+    if isinstance(max_attempts, bool) or isinstance(max_attempts, float):
         return 1, "Invalid retry_policy.max_attempts"
 
     try:

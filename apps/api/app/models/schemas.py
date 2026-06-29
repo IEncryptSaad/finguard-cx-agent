@@ -83,7 +83,7 @@ class WorkflowCreate(BaseModel):
             return retry_policy
 
         max_attempts = retry_policy["max_attempts"]
-        if isinstance(max_attempts, bool):
+        if isinstance(max_attempts, bool) or isinstance(max_attempts, float):
             raise ValueError("retry_policy.max_attempts must be an integer between 0 and 10")
 
         try:

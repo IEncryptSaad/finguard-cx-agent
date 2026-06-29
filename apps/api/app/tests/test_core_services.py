@@ -1,5 +1,6 @@
 import asyncio
 import json
+import pytest
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -342,6 +343,8 @@ def test_api_contract_errors_are_standardized_for_validation_and_missing_resourc
     assert method_not_allowed.status_code == 405
     assert method_not_allowed.json()["code"] == "http_error"
     assert method_not_allowed.json()["message"] == "Method Not Allowed"
+    assert method_not_allowed.headers["allow"]
+    assert "GET" in method_not_allowed.headers["allow"]
 
 
 def test_knowledge_upload_rejects_unsupported_and_oversized_files():
@@ -378,7 +381,7 @@ def test_workflow_invalid_retry_policy_is_rejected_at_creation():
 
 def test_workflow_failures_are_recorded_without_crashing():
     from app.models.schemas import WorkflowCreate
-    from app.services.workflows import _WORKFLOWS, create_workflow, run_workflow
+    from app.services.workflows import create_workflow, run_workflow
 
     missing = run_workflow("missing-workflow-id", {"source": "contract-test"})
     assert missing.status == "failed"
@@ -398,6 +401,12 @@ def test_workflow_failures_are_recorded_without_crashing():
     assert failed.attempts == 2
     assert failed.error
 
+
+@pytest.mark.parametrize("max_attempts", ["", False, "two", 1.5, 11])
+def test_persisted_malformed_retry_policy_fails_execution(max_attempts):
+    from app.models.schemas import WorkflowCreate
+    from app.services.workflows import _WORKFLOWS, create_workflow, run_workflow
+
     malformed = create_workflow(
         WorkflowCreate(
             name="Malformed persisted retry policy",
@@ -406,12 +415,33 @@ def test_workflow_failures_are_recorded_without_crashing():
             actions=[{"type": "notify_admin"}],
         )
     )
-    _WORKFLOWS[malformed.id] = malformed.model_copy(update={"retry_policy": {"max_attempts": "two"}})
+    _WORKFLOWS[malformed.id] = malformed.model_copy(update={"retry_policy": {"max_attempts": max_attempts}})
 
     malformed_execution = run_workflow(malformed.id, {"source": "contract-test"})
     assert malformed_execution.status == "failed"
     assert malformed_execution.attempts == 1
     assert malformed_execution.error == "Invalid retry_policy.max_attempts"
+
+
+@pytest.mark.parametrize("retry_policy", [{}, {"max_attempts": None}])
+def test_persisted_missing_or_null_retry_policy_uses_default_safely(retry_policy):
+    from app.models.schemas import WorkflowCreate
+    from app.services.workflows import _WORKFLOWS, create_workflow, run_workflow
+
+    workflow = create_workflow(
+        WorkflowCreate(
+            name="Defaulted persisted retry policy",
+            trigger="webhook_received",
+            status="active",
+            actions=[{"type": "notify_admin"}],
+        )
+    )
+    _WORKFLOWS[workflow.id] = workflow.model_copy(update={"retry_policy": retry_policy})
+
+    execution = run_workflow(workflow.id, {"source": "contract-test"})
+    assert execution.status == "succeeded"
+    assert execution.attempts == 1
+    assert execution.error is None
 
 
 def test_openapi_is_versioned_and_documents_error_schema():
