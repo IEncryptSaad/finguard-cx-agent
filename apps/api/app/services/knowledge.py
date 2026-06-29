@@ -3,9 +3,14 @@ from uuid import uuid4
 from app.models.schemas import KnowledgeArticle
 from app.services.audit import log_event
 _ARTICLES: dict[str, KnowledgeArticle] = {}
+_SEEDED = False
+
 def seed_articles():
-    if not any(a.title == "Card dispute basics" for a in _ARTICLES.values()):
-        create_article("Card dispute basics", "We can help file a dispute and may request transaction details, never full card numbers.", ["dispute", "card"])
+    global _SEEDED
+    if _SEEDED or _ARTICLES:
+        return
+    create_article("Card dispute basics", "We can help file a dispute and may request transaction details, never full card numbers.", ["dispute", "card"])
+    _SEEDED = True
 def create_article(title: str, body: str, tags: list[str] | None = None) -> KnowledgeArticle:
     a=KnowledgeArticle(id=str(uuid4()), title=title.strip(), body=body.strip(), tags=tags or []) ; _ARTICLES[a.id]=a; log_event("knowledge.created", {"article_id": a.id}); return a
 def list_articles() -> list[KnowledgeArticle]: seed_articles(); return list(_ARTICLES.values())
@@ -30,3 +35,5 @@ def ingest_document(filename: str, content: bytes) -> KnowledgeArticle:
     else:
         raise ValueError("Unsupported document type")
     return create_article(Path(filename).stem, text[:20000], [suffix.lstrip('.') or 'document'])
+
+seed_articles()

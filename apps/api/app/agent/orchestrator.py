@@ -1,7 +1,7 @@
 from app.agent.llm import LLMProvider
 from app.models.schemas import ChatResponse
 from app.services.audit import log_event
-from app.services.guardrails import evaluate_message
+from app.services.guardrails import GuardrailDecision, evaluate_message
 from app.services.handoff import request_handoff
 from app.services.memory import add_message, get_or_create_conversation, history
 from app.services.pii import redact_pii
@@ -18,7 +18,10 @@ class AgentOrchestrator:
         pii_clean, pii_redacted = redact_pii(message) if settings.pii_redaction_enabled else (message, False)
         clean, credential_redacted = redact_credentials(pii_clean)
         was_redacted = pii_redacted or credential_redacted
-        decision = policy_engine.evaluate(clean, evaluate_message(clean)) if settings.guardrails_enabled else evaluate_message(clean)
+        if settings.guardrails_enabled:
+            decision = policy_engine.evaluate(clean, evaluate_message(clean))
+        else:
+            decision = GuardrailDecision(allowed=True, handoff_required=False)
         if decision.allowed:
             add_message(conv.id, "customer", clean)
         log_event("chat.received", {"conversation_id": conv.id, "redacted": was_redacted, "allowed": decision.allowed})

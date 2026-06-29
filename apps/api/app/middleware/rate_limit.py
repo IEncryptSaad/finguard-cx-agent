@@ -5,8 +5,10 @@ from fastapi.responses import JSONResponse
 _BUCKETS: dict[str, deque[float]] = defaultdict(deque)
 def rate_limit_middleware(limit: int, window_seconds: int):
     async def middleware(request: Request, call_next):
+        from app.services.settings import get_app_settings
+        current_limit = get_app_settings().rate_limit_per_minute
         key = request.client.host if request.client else "unknown"; now=time.time(); bucket=_BUCKETS[key]
         while bucket and now-bucket[0] > window_seconds: bucket.popleft()
-        if len(bucket) >= limit: return JSONResponse(status_code=429, content={"code":"rate_limited","message":"Too many requests"})
+        if len(bucket) >= current_limit: return JSONResponse(status_code=429, content={"code":"rate_limited","message":"Too many requests"})
         bucket.append(now); return await call_next(request)
     return middleware
