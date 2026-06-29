@@ -247,3 +247,75 @@ def test_automation_platform_workflow_product_feedback_marketplace_and_internal_
     assistant = client.post("/api/v1/assistant/internal", json={"query": "draft a reply about export failures", "conversation_id": chat.json()["conversation_id"]})
     assert assistant.status_code == 200
     assert assistant.json()["answer"]
+
+
+def test_new_conversation_workflow_runs_without_conversation_id():
+    from app.models.schemas import WorkflowCreate
+    from app.services.workflows import create_workflow, execution_history
+
+    workflow = create_workflow(WorkflowCreate(name="New conversation no ID", trigger="new_conversation", status="active"))
+
+    response = asyncio.run(AgentOrchestrator(MockLLMProvider()).handle_chat("Hello there"))
+
+    executions = [e for e in execution_history(workflow.id) if e.input.get("conversation_id") == response.conversation_id]
+    assert len(executions) == 1
+    assert executions[0].input["ticket_id"] is None
+
+
+def test_new_conversation_workflow_runs_with_client_provided_conversation_id():
+    from app.models.schemas import WorkflowCreate
+    from app.services.workflows import create_workflow, execution_history
+
+    workflow = create_workflow(WorkflowCreate(name="New conversation client ID", trigger="new_conversation", status="active"))
+    conversation_id = "client-provided-new-conversation"
+
+    response = asyncio.run(AgentOrchestrator(MockLLMProvider()).handle_chat("Hello with my ID", conversation_id=conversation_id))
+
+    executions = [e for e in execution_history(workflow.id) if e.input.get("conversation_id") == response.conversation_id]
+    assert response.conversation_id == conversation_id
+    assert len(executions) == 1
+
+
+def test_new_conversation_workflow_skips_existing_conversation_id():
+    from app.models.schemas import WorkflowCreate
+    from app.services.workflows import create_workflow, execution_history
+
+    conversation_id = "client-provided-existing-conversation"
+    first = asyncio.run(AgentOrchestrator(MockLLMProvider()).handle_chat("Start existing", conversation_id=conversation_id))
+    workflow = create_workflow(WorkflowCreate(name="Existing conversation skip", trigger="new_conversation", status="active"))
+
+    second = asyncio.run(AgentOrchestrator(MockLLMProvider()).handle_chat("Continue existing", conversation_id=conversation_id))
+
+    executions = [e for e in execution_history(workflow.id) if e.input.get("conversation_id") == conversation_id]
+    assert first.conversation_id == second.conversation_id == conversation_id
+    assert executions == []
+
+
+def test_escalation_workflow_runs_once_for_blocked_handoff():
+    from app.models.schemas import WorkflowCreate
+    from app.services.workflows import create_workflow, execution_history
+
+    workflow = create_workflow(WorkflowCreate(name="Blocked escalation", trigger="escalation", status="active"))
+
+    response = asyncio.run(AgentOrchestrator(MockLLMProvider()).handle_chat("my password is hunter2"))
+
+    executions = [e for e in execution_history(workflow.id) if e.input.get("conversation_id") == response.conversation_id]
+    assert response.handoff_required is True
+    assert response.ticket_id
+    assert len(executions) == 1
+    assert executions[0].input["ticket_id"] == response.ticket_id
+
+
+def test_escalation_workflow_runs_once_for_allowed_handoff():
+    from app.models.schemas import WorkflowCreate
+    from app.services.workflows import create_workflow, execution_history
+
+    workflow = create_workflow(WorkflowCreate(name="Allowed escalation", trigger="escalation", status="active"))
+
+    response = asyncio.run(AgentOrchestrator(MockLLMProvider()).handle_chat("I need to dispute a transaction"))
+
+    executions = [e for e in execution_history(workflow.id) if e.input.get("conversation_id") == response.conversation_id]
+    assert response.handoff_required is True
+    assert response.ticket_id
+    assert len(executions) == 1
+    assert executions[0].input["ticket_id"] == response.ticket_id

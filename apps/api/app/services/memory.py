@@ -4,6 +4,9 @@ from app.models.schemas import Conversation, ConversationMessage
 _CONVERSATIONS: dict[str, Conversation] = {}
 _MESSAGES: list[ConversationMessage] = []
 
+def conversation_exists(conversation_id: str) -> bool:
+    return conversation_id in _CONVERSATIONS
+
 def get_or_create_conversation(conversation_id: str | None = None, user_id: str | None = None) -> Conversation:
     cid = conversation_id or str(uuid4())
     conv = _CONVERSATIONS.get(cid)
