@@ -5,15 +5,18 @@ from app.services.guardrails import evaluate_message
 from app.services.handoff import request_handoff
 from app.services.memory import add_message, get_or_create_conversation, history
 from app.services.pii import redact_pii
-from app.services.policy import policy_engine
+from app.services.policy import policy_engine, redact_credentials
 from app.services.prompts import prompt_manager
 class AgentOrchestrator:
     def __init__(self, llm: LLMProvider): self.llm = llm
     async def handle_chat(self, message: str, conversation_id: str | None = None, user_id: str | None = None) -> ChatResponse:
         conv = get_or_create_conversation(conversation_id, user_id)
-        clean, was_redacted = redact_pii(message)
-        add_message(conv.id, "customer", clean)
+        pii_clean, pii_redacted = redact_pii(message)
+        clean, credential_redacted = redact_credentials(pii_clean)
+        was_redacted = pii_redacted or credential_redacted
         decision = policy_engine.evaluate(clean, evaluate_message(clean))
+        if decision.allowed:
+            add_message(conv.id, "customer", clean)
         log_event("chat.received", {"conversation_id": conv.id, "redacted": was_redacted, "allowed": decision.allowed})
         if not decision.allowed:
             ticket = request_handoff(conv.id, decision.reason)

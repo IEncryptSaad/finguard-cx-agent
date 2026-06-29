@@ -3,7 +3,7 @@ from fastapi.responses import StreamingResponse
 from app.agent.llm import provider_from_name
 from app.agent.orchestrator import AgentOrchestrator
 from app.core.config import get_settings, Settings
-from app.models.schemas import ChatRequest, ChatResponse, KnowledgeArticle
+from app.models.schemas import ChatRequest, ChatResponse, KnowledgeArticle, KnowledgeArticleCreate, KnowledgeArticleUpdate
 from app.services.audit import events
 from app.services.knowledge import create_article, delete_article, list_articles, update_article
 from app.services.memory import conversations, history
@@ -31,9 +31,9 @@ def ticket(payload: dict): return create_ticket(payload.get("conversation_id", "
 @router.get("/knowledge", response_model=list[KnowledgeArticle])
 def knowledge(): return list_articles()
 @router.post("/knowledge", response_model=KnowledgeArticle)
-def knowledge_create(payload: KnowledgeArticle): return create_article(payload.title, payload.body, payload.tags)
+def knowledge_create(payload: KnowledgeArticleCreate): return create_article(payload.title, payload.body, payload.tags)
 @router.put("/knowledge/{article_id}", response_model=KnowledgeArticle)
-def knowledge_update(article_id: str, payload: KnowledgeArticle): return update_article(article_id, payload.title, payload.body, payload.tags)
+def knowledge_update(article_id: str, payload: KnowledgeArticleUpdate): return update_article(article_id, payload.title, payload.body, payload.tags)
 @router.delete("/knowledge/{article_id}")
 def knowledge_delete(article_id: str): delete_article(article_id); return {"deleted": True}
 @router.get("/audit")

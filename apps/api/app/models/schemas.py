@@ -16,8 +16,14 @@ class ConversationMessage(BaseModel):
     id: str; conversation_id: str; role: str; content: str; created_at: str
 class Ticket(BaseModel):
     id: str; conversation_id: str; summary: str; status: str = "open"; priority: str = "normal"
-class KnowledgeArticle(BaseModel):
-    id: str; title: str; body: str; tags: list[str] = []
+class KnowledgeArticleBase(BaseModel):
+    title: str; body: str; tags: list[str] = []
+class KnowledgeArticleCreate(KnowledgeArticleBase):
+    pass
+class KnowledgeArticleUpdate(KnowledgeArticleBase):
+    pass
+class KnowledgeArticle(KnowledgeArticleBase):
+    id: str
 class AuditLog(BaseModel):
     event_type: str; payload: dict; created_at: str
 class LifecycleEvent(BaseModel):
