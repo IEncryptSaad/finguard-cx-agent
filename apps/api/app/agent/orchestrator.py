@@ -8,6 +8,8 @@ from app.services.pii import redact_pii
 from app.services.policy import policy_engine, redact_credentials
 from app.services.prompts import prompt_manager
 from app.services.settings import get_app_settings
+from app.services.feedback import classify_conversation
+from app.services.workflows import list_workflows, run_workflow
 import time
 class AgentOrchestrator:
     def __init__(self, llm: LLMProvider): self.llm = llm
@@ -15,6 +17,7 @@ class AgentOrchestrator:
         started = time.perf_counter()
         settings = get_app_settings()
         conv = get_or_create_conversation(conversation_id, user_id)
+        is_new_conversation = conversation_id is None
         pii_clean, pii_redacted = redact_pii(message) if settings.pii_redaction_enabled else (message, False)
         clean, credential_redacted = redact_credentials(pii_clean)
         was_redacted = pii_redacted or credential_redacted
@@ -40,4 +43,8 @@ class AgentOrchestrator:
             log_event("handoff.requested", {"conversation_id": conv.id, "ticket_id": ticket_id})
         add_message(conv.id, "agent", answer)
         log_event("chat.responded", {"conversation_id": conv.id, "handoff_required": decision.handoff_required, "response_time_ms": round((time.perf_counter()-started)*1000, 2)})
+        classify_conversation(conv.id)
+        for wf in list_workflows():
+            if wf.status == "active" and (wf.trigger == "new_conversation" and is_new_conversation or wf.trigger == "escalation" and decision.handoff_required):
+                run_workflow(wf.id, {"conversation_id": conv.id, "ticket_id": ticket_id})
         return ChatResponse(conversation_id=conv.id, message=answer, redacted=was_redacted, handoff_required=decision.handoff_required, ticket_id=ticket_id)

@@ -63,3 +63,50 @@ class AnalyticsSummary(BaseModel):
     ai_provider_usage: dict[str, int]
     knowledge_searches: int
     recent_audit_events: list[dict]
+
+class WorkflowTrigger(StrEnum):
+    new_conversation = "new_conversation"; conversation_resolved = "conversation_resolved"; escalation = "escalation"; knowledge_article_created = "knowledge_article_created"; webhook_received = "webhook_received"; scheduled_event = "scheduled_event"
+class WorkflowActionType(StrEnum):
+    create_ticket = "create_ticket"; summarize_conversation = "summarize_conversation"; send_webhook = "send_webhook"; generate_knowledge_article = "generate_knowledge_article"; assign_operator = "assign_operator"; notify_admin = "notify_admin"; custom_plugin_action = "custom_plugin_action"
+class WorkflowCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    trigger: WorkflowTrigger
+    conditions: list[dict] = []
+    actions: list[dict] = []
+    retry_policy: dict = {"max_attempts": 3, "backoff_seconds": 30}
+    status: str = Field(default="draft", pattern="^(draft|active|paused|archived)$")
+class Workflow(WorkflowCreate):
+    id: str; created_at: str; updated_at: str
+class WorkflowExecution(BaseModel):
+    id: str; workflow_id: str; status: str; started_at: str; finished_at: str | None = None; attempts: int = 1; input: dict = {}; output: dict = {}; error: str | None = None
+
+class ProductItemType(StrEnum):
+    feature_request = "feature_request"; bug_report = "bug_report"; product_feedback = "product_feedback"; roadmap_item = "roadmap_item"
+class ProductItemCreate(BaseModel):
+    type: ProductItemType
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=4000)
+    status: str = Field(default="open", pattern="^(open|in_progress|completed|closed)$")
+    priority: str = Field(default="normal", pattern="^(low|normal|high|urgent)$")
+    labels: list[str] = []
+    owner: str | None = None
+    linked_conversations: list[str] = []
+    attachments: list[str] = []
+class ProductItem(ProductItemCreate):
+    id: str; ai_summary: str; ai_priority_suggestion: str; duplicate_of: str | None = None; created_at: str; updated_at: str
+
+class FeedbackClassification(BaseModel):
+    id: str; conversation_id: str; category: str; sentiment: str; summary: str; recommended_action: str; confidence_score: float; created_at: str
+
+class InternalAssistantRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=2000)
+    conversation_id: str | None = None
+class InternalAssistantResponse(BaseModel):
+    answer: str; sources: list[str]; suggested_actions: list[str]
+
+class MarketplaceInstallRequest(BaseModel):
+    name: str
+    kind: str = Field(pattern="^(action|workflow|ai_provider|knowledge_connector|analytics|notification)$")
+    enabled: bool = True
+class MarketplacePlugin(BaseModel):
+    name: str; kind: str; enabled: bool; description: str = ""

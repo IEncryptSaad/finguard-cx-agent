@@ -202,3 +202,48 @@ def test_rate_limit_setting_updates_are_enforced_without_restart():
     finally:
         update_app_settings(original)
         _BUCKETS.clear()
+
+def test_automation_platform_workflow_product_feedback_marketplace_and_internal_assistant():
+    client = TestClient(app)
+
+    workflow = client.post("/api/v1/workflows", json={
+        "name": "Escalation notifier",
+        "trigger": "escalation",
+        "actions": [{"type": "notify_admin"}],
+        "status": "active"
+    })
+    assert workflow.status_code == 200
+    workflow_id = workflow.json()["id"]
+    execution = client.post(f"/api/v1/workflows/{workflow_id}/execute", json={"source": "test"})
+    assert execution.status_code == 200
+    assert execution.json()["status"] == "succeeded"
+
+    chat = client.post("/api/v1/chat", json={"message": "The export feature is broken and fails every time"})
+    assert chat.status_code == 200
+    classification = client.get(f"/api/v1/feedback/conversations/{chat.json()['conversation_id']}")
+    assert classification.status_code == 200
+    assert classification.json()["category"] in {"Bug", "Feature Request"}
+
+    item = client.post("/api/v1/roadmap", json={
+        "type": "bug_report",
+        "title": "Export fails",
+        "description": "The export feature is broken and fails every time",
+        "linked_conversations": [chat.json()["conversation_id"]]
+    })
+    assert item.status_code == 200
+    assert item.json()["ai_priority_suggestion"] in {"high", "normal"}
+    dashboard = client.get("/api/v1/roadmap/dashboard")
+    assert dashboard.status_code == 200
+    assert "open" in dashboard.json()
+
+    insights = client.get("/api/v1/analytics/insights")
+    assert insights.status_code == 200
+    assert "handoff_rate" in insights.json()
+
+    installed = client.post("/api/v1/marketplace/install", json={"name": "ops_notify", "kind": "notification"})
+    assert installed.status_code == 200
+    assert installed.json()["enabled"] is True
+
+    assistant = client.post("/api/v1/assistant/internal", json={"query": "draft a reply about export failures", "conversation_id": chat.json()["conversation_id"]})
+    assert assistant.status_code == 200
+    assert assistant.json()["answer"]

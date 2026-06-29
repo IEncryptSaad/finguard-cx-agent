@@ -25,3 +25,6 @@ class KnowledgeSourcePlugin(ActionPlugin): pass
 class AuthenticationProviderPlugin(ActionPlugin): pass
 class AnalyticsProviderPlugin(ActionPlugin): pass
 class NotificationProviderPlugin(ActionPlugin): pass
+
+class WorkflowPlugin(ActionPlugin): pass
+class MarketplacePluginBundle(Plugin, ABC): pass

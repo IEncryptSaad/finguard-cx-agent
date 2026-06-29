@@ -3,14 +3,18 @@ from fastapi.responses import StreamingResponse
 from app.agent.llm import provider_from_name
 from app.agent.orchestrator import AgentOrchestrator
 from app.core.config import get_settings, Settings
-from app.models.schemas import AppSettings, ChatRequest, ChatResponse, KnowledgeArticle, KnowledgeArticleCreate, KnowledgeArticleUpdate, TicketCreate, TicketUpdate
+from app.models.schemas import AppSettings, ChatRequest, ChatResponse, InternalAssistantRequest, InternalAssistantResponse, KnowledgeArticle, KnowledgeArticleCreate, KnowledgeArticleUpdate, MarketplaceInstallRequest, MarketplacePlugin, ProductItem, ProductItemCreate, TicketCreate, TicketUpdate, Workflow, WorkflowCreate, WorkflowExecution, FeedbackClassification
 from app.plugins.registry import plugin_catalog
-from app.services.analytics import analytics_summary
+from app.services.analytics import analytics_summary, insights_dashboard
 from app.services.audit import events
 from app.services.knowledge import create_article, delete_article, ingest_document, list_articles, search_articles, update_article
 from app.services.memory import conversations, history
 from app.services.settings import get_app_settings, update_app_settings
 from app.services.tickets import create_ticket, list_tickets, update_ticket
+from app.services.feedback import classify_conversation, create_product_item, get_classification, list_classifications, list_product_items, product_dashboard
+from app.services.internal_assistant import answer_internal
+from app.services.marketplace import install_plugin, list_marketplace
+from app.services.workflows import create_workflow, execution_history, list_workflows, run_workflow
 router = APIRouter(prefix="/api/v1")
 def orchestrator(settings: Settings = Depends(get_settings)) -> AgentOrchestrator:
     return AgentOrchestrator(provider_from_name(get_app_settings().active_ai_provider or settings.llm_provider))
@@ -49,6 +53,36 @@ def audit(): return events()
 def analytics(): return analytics_summary()
 @router.get("/plugins")
 def plugins(): return plugin_catalog()
+
+@router.get("/workflows", response_model=list[Workflow])
+def workflows(): return list_workflows()
+@router.post("/workflows", response_model=Workflow)
+def workflow_create(payload: WorkflowCreate): return create_workflow(payload)
+@router.post("/workflows/{workflow_id}/execute", response_model=WorkflowExecution)
+def workflow_execute(workflow_id: str, context: dict | None = None): return run_workflow(workflow_id, context)
+@router.get("/workflows/{workflow_id}/executions", response_model=list[WorkflowExecution])
+def workflow_executions(workflow_id: str): return execution_history(workflow_id)
+@router.get("/feedback", response_model=list[FeedbackClassification])
+def feedback(): return list_classifications()
+@router.post("/feedback/conversations/{conversation_id}/classify", response_model=FeedbackClassification)
+def feedback_classify(conversation_id: str): return classify_conversation(conversation_id)
+@router.get("/feedback/conversations/{conversation_id}", response_model=FeedbackClassification)
+def feedback_get(conversation_id: str): return get_classification(conversation_id)
+@router.get("/roadmap", response_model=list[ProductItem])
+def roadmap(type: str | None = None): return list_product_items(type)
+@router.post("/roadmap", response_model=ProductItem)
+def roadmap_create(payload: ProductItemCreate): return create_product_item(payload)
+@router.get("/roadmap/dashboard")
+def roadmap_dash(): return product_dashboard()
+@router.get("/analytics/insights")
+def insights(): return insights_dashboard()
+@router.get("/marketplace", response_model=list[MarketplacePlugin])
+def marketplace(): return list_marketplace()
+@router.post("/marketplace/install", response_model=MarketplacePlugin)
+def marketplace_install(payload: MarketplaceInstallRequest): return install_plugin(payload)
+@router.post("/assistant/internal", response_model=InternalAssistantResponse)
+async def internal_assistant(payload: InternalAssistantRequest, agent: AgentOrchestrator = Depends(orchestrator)): return await answer_internal(payload, agent)
+
 @router.get("/settings", response_model=AppSettings)
 def settings_get(): return get_app_settings()
 @router.put("/settings", response_model=AppSettings)
