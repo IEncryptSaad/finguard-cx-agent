@@ -2,7 +2,11 @@ import re
 from app.services.guardrails import GuardrailDecision
 CREDENTIAL_PLACEHOLDER = "[REDACTED_CREDENTIAL]"
 _CREDENTIAL_PATTERNS = [
-    re.compile(r"\b(password|passcode|pin|api[_ -]?key|secret|token)\b\s*[:=]?\s*\S+", re.IGNORECASE),
+    re.compile(
+        r"\b((?:reset\s+)?(?:password|passcode|pin)|api[_ -]?key|secret|token)\b"
+        r"\s*(?:(?:is|as|to|for)\b|[:=])?\s*\S+",
+        re.IGNORECASE,
+    ),
 ]
 
 def redact_credentials(message: str) -> tuple[str, bool]:

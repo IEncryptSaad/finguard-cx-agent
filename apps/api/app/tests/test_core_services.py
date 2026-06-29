@@ -9,6 +9,7 @@ from app.auth.rbac import can_access
 from app.models.schemas import Role
 from app.services.guardrails import evaluate_message
 from app.services.pii import redact_pii
+from app.services.policy import CREDENTIAL_PLACEHOLDER, redact_credentials
 from app.main import app
 
 
@@ -17,6 +18,51 @@ def test_pii_redaction_masks_sensitive_values():
     assert changed is True
     assert "person@example.com" not in clean
     assert clean.count("[REDACTED]") == 2
+
+
+def test_credential_redaction_consumes_common_connectors():
+    examples = {
+        "api key is sk-test-api-key-123": "sk-test-api-key-123",
+        "token is tok-test-token-123": "tok-test-token-123",
+        "reset password is reset-test-password-123": "reset-test-password-123",
+        "secret is secret-test-value-123": "secret-test-value-123",
+        "password is hunter2-test-password-123": "hunter2-test-password-123",
+    }
+
+    for message, secret in examples.items():
+        clean, changed = redact_credentials(message)
+
+        assert changed is True
+        assert secret not in clean
+        assert " is " not in clean.lower()
+        assert CREDENTIAL_PLACEHOLDER in clean
+
+
+def test_credential_chat_redacts_values_from_memory_audit_and_messages_api():
+    client = TestClient(app)
+    examples = {
+        "api key is sk-chat-api-key-123": "sk-chat-api-key-123",
+        "token is tok-chat-token-123": "tok-chat-token-123",
+        "reset password is reset-chat-password-123": "reset-chat-password-123",
+        "secret is secret-chat-value-123": "secret-chat-value-123",
+        "password is hunter2-chat-password-123": "hunter2-chat-password-123",
+    }
+
+    for message, secret in examples.items():
+        response = client.post("/api/v1/chat", json={"message": message})
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["redacted"] is True
+        assert secret not in response.text
+
+        messages = client.get(f"/api/v1/conversations/{payload['conversation_id']}/messages")
+        assert messages.status_code == 200
+        assert secret not in messages.text
+        assert CREDENTIAL_PLACEHOLDER in messages.text or payload["handoff_required"] is True
+
+        audit = client.get("/api/v1/audit")
+        assert audit.status_code == 200
+        assert secret not in audit.text
 
 def test_guardrails_trigger_handoff_for_fraud():
     decision = evaluate_message("I see suspected fraud on my card")
