@@ -21,6 +21,7 @@ async def http_exception_handler(request: Request, exc: HTTPException | Starlett
     return JSONResponse(
         status_code=exc.status_code,
         content=error_response("http_error", str(detail.get("reason", "Request failed")), detail),
+        headers=getattr(exc, "headers", None),
     )
 
 
