@@ -1,4 +1,5 @@
 from uuid import uuid4
+from fastapi import HTTPException, status as http_status
 from app.models.schemas import Ticket
 from app.services.audit import log_event
 _TICKETS: dict[str, Ticket] = {}
@@ -10,7 +11,9 @@ def create_ticket(conversation_id: str, summary: str, priority: str = "normal") 
 def list_tickets() -> list[Ticket]:
     return list(_TICKETS.values())
 def update_ticket(ticket_id: str, *, status: str | None = None, priority: str | None = None, summary: str | None = None) -> Ticket:
-    ticket = _TICKETS[ticket_id]
+    ticket = _TICKETS.get(ticket_id)
+    if ticket is None:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Ticket not found")
     if status: ticket.status = status
     if priority: ticket.priority = priority
     if summary: ticket.summary = summary

@@ -4,3 +4,10 @@ create table if not exists workflow_executions (id uuid primary key, workflow_id
 create table if not exists product_items (id uuid primary key, type text not null, title text not null, description text not null default '', status text not null default 'open', priority text not null default 'normal', labels text[] not null default '{}', owner text, linked_conversations text[] not null default '{}', attachments text[] not null default '{}', ai_summary text not null default '', ai_priority_suggestion text not null default 'normal', duplicate_of uuid, created_at timestamptz not null default now(), updated_at timestamptz not null default now());
 create table if not exists feedback_classifications (id uuid primary key, conversation_id text not null, category text not null, sentiment text not null, summary text not null default '', recommended_action text not null default '', confidence_score numeric not null default 0, created_at timestamptz not null default now());
 create table if not exists marketplace_plugins (name text primary key, kind text not null, enabled boolean not null default true, description text not null default '', installed_at timestamptz not null default now());
+
+-- RC1 hardening: idempotent indexes for common list/filter paths.
+create index if not exists idx_workflows_status_trigger on workflows(status, trigger);
+create index if not exists idx_workflow_executions_workflow_started on workflow_executions(workflow_id, started_at desc);
+create index if not exists idx_feedback_classifications_conversation on feedback_classifications(conversation_id);
+create index if not exists idx_product_items_status_priority on product_items(status, priority);
+create index if not exists idx_marketplace_plugins_kind_enabled on marketplace_plugins(kind, enabled);

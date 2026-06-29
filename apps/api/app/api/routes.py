@@ -3,7 +3,7 @@ from fastapi.responses import StreamingResponse
 from app.agent.llm import provider_from_name
 from app.agent.orchestrator import AgentOrchestrator
 from app.core.config import get_settings, Settings
-from app.models.schemas import AppSettings, ChatRequest, ChatResponse, InternalAssistantRequest, InternalAssistantResponse, KnowledgeArticle, KnowledgeArticleCreate, KnowledgeArticleUpdate, MarketplaceInstallRequest, MarketplacePlugin, ProductItem, ProductItemCreate, TicketCreate, TicketUpdate, Workflow, WorkflowCreate, WorkflowExecution, FeedbackClassification
+from app.models.schemas import AppSettings, ChatRequest, ChatResponse, ErrorResponse, InternalAssistantRequest, InternalAssistantResponse, KnowledgeArticle, KnowledgeArticleCreate, KnowledgeArticleUpdate, MarketplaceInstallRequest, MarketplacePlugin, ProductItem, ProductItemCreate, TicketCreate, TicketUpdate, Workflow, WorkflowCreate, WorkflowExecution, FeedbackClassification
 from app.plugins.registry import plugin_catalog
 from app.services.analytics import analytics_summary, insights_dashboard
 from app.services.audit import events
@@ -15,7 +15,7 @@ from app.services.feedback import classify_conversation, create_product_item, ge
 from app.services.internal_assistant import answer_internal
 from app.services.marketplace import install_plugin, list_marketplace
 from app.services.workflows import create_workflow, execution_history, list_workflows, run_workflow
-router = APIRouter(prefix="/api/v1")
+router = APIRouter(prefix="/api/v1", responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}, 422: {"model": ErrorResponse}, 500: {"model": ErrorResponse}})
 def orchestrator(settings: Settings = Depends(get_settings)) -> AgentOrchestrator:
     return AgentOrchestrator(provider_from_name(get_app_settings().active_ai_provider or settings.llm_provider))
 @router.post("/chat", response_model=ChatResponse)
