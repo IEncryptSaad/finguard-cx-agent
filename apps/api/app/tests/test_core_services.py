@@ -319,3 +319,65 @@ def test_escalation_workflow_runs_once_for_allowed_handoff():
     assert response.ticket_id
     assert len(executions) == 1
     assert executions[0].input["ticket_id"] == response.ticket_id
+
+
+def test_api_contract_errors_are_standardized_for_validation_and_missing_resources():
+    client = TestClient(app)
+
+    validation = client.post("/api/v1/chat", json={"message": ""})
+    assert validation.status_code == 422
+    assert validation.json()["code"] == "validation_error"
+    assert validation.json()["details"]["errors"]
+
+    missing_ticket = client.patch("/api/v1/tickets/missing-ticket", json={"status": "resolved"})
+    assert missing_ticket.status_code == 404
+    assert missing_ticket.json()["code"] == "http_error"
+
+
+def test_knowledge_upload_rejects_unsupported_and_oversized_files():
+    client = TestClient(app)
+
+    unsupported = client.post(
+        "/api/v1/knowledge/ingest",
+        files={"file": ("malware.exe", b"not allowed", "application/octet-stream")},
+    )
+    assert unsupported.status_code == 415
+    assert unsupported.json()["code"] == "http_error"
+
+    oversized = client.post(
+        "/api/v1/knowledge/ingest",
+        files={"file": ("large.txt", b"x" * (2 * 1024 * 1024 + 1), "text/plain")},
+    )
+    assert oversized.status_code == 413
+
+
+def test_workflow_failures_are_recorded_without_crashing():
+    from app.models.schemas import WorkflowCreate
+    from app.services.workflows import create_workflow, run_workflow
+
+    missing = run_workflow("missing-workflow-id", {"source": "contract-test"})
+    assert missing.status == "failed"
+    assert missing.error == "Workflow not found"
+
+    workflow = create_workflow(
+        WorkflowCreate(
+            name="Invalid action workflow",
+            trigger="webhook_received",
+            status="active",
+            actions=[{"missing_type": "notify"}],
+            retry_policy={"max_attempts": 2},
+        )
+    )
+    failed = run_workflow(workflow.id, {"source": "contract-test"})
+    assert failed.status == "failed"
+    assert failed.attempts == 2
+    assert failed.error
+
+
+def test_openapi_is_versioned_and_documents_error_schema():
+    client = TestClient(app)
+    openapi = client.get("/api/v1/openapi.json")
+    assert openapi.status_code == 200
+    payload = openapi.json()
+    assert payload["info"]["version"] == "1.0.0-rc1"
+    assert "ErrorResponse" in payload["components"]["schemas"]

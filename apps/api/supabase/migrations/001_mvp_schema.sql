@@ -6,3 +6,10 @@ create table if not exists tickets (id uuid primary key default gen_random_uuid(
 create table if not exists knowledge_articles (id uuid primary key default gen_random_uuid(), title text not null, body text not null, tags text[] default '{}', created_at timestamptz default now(), updated_at timestamptz default now());
 create table if not exists audit_logs (id uuid primary key default gen_random_uuid(), event_type text not null, payload jsonb not null default '{}', created_at timestamptz default now());
 create table if not exists lifecycle_events (id uuid primary key default gen_random_uuid(), name text not null, payload jsonb not null default '{}', status text default 'queued', created_at timestamptz default now());
+
+-- RC1 hardening: idempotent indexes for operational queries.
+create index if not exists idx_conversation_messages_conversation_created on conversation_messages(conversation_id, created_at);
+create index if not exists idx_tickets_status_priority on tickets(status, priority);
+create index if not exists idx_tickets_conversation on tickets(conversation_id);
+create index if not exists idx_knowledge_articles_tags on knowledge_articles using gin(tags);
+create index if not exists idx_audit_logs_event_created on audit_logs(event_type, created_at desc);

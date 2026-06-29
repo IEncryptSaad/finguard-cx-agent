@@ -97,3 +97,9 @@ Requests enter the versioned FastAPI router and are delegated to `AgentOrchestra
 ## Supabase schema
 
 Run `apps/api/supabase/migrations/001_mvp_schema.sql` and `apps/api/supabase/seed.sql` in Supabase SQL editor for persistent free-tier deployments.
+
+## RC1 production-readiness notes
+
+FinGuard CX Agent RC1 focuses on hardening the existing MVP without changing the architecture. The API is versioned under `/api/v1`, OpenAPI is available at `/api/v1/openapi.json`, standard error responses use the shared `ErrorResponse` shape, and mock mode remains the default so the app runs from a clean clone without paid API keys.
+
+See `docs/release-notes-rc1.md` for the RC1 readiness checklist, known limitations, and RC2/v1.0 roadmap.

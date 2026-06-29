@@ -15,3 +15,27 @@
 
 ## Database: Supabase
 Run `apps/api/supabase/migrations/001_mvp_schema.sql`, then `apps/api/supabase/seed.sql`. The MVP still runs without Supabase using in-memory mock storage.
+
+## RC1 free-tier deployment verification
+
+### Backend on Render Free
+
+- Root directory: `apps/api`
+- Build command: `pip install -r requirements.txt`
+- Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- Required for keyless mock mode: `LLM_PROVIDER=mock`
+- Optional persistence: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+
+### Frontend on Vercel Free
+
+- Project root: `apps/web`
+- Framework preset: Next.js
+- Set `NEXT_PUBLIC_API_BASE_URL` to the Render backend URL.
+
+### Supabase from scratch
+
+Run migrations in order from `apps/api/supabase/migrations`, then run `apps/api/supabase/seed.sql`. Migrations and RC1 indexes are idempotent, so rerunning them is safe during setup validation.
+
+### Mock mode
+
+Mock mode is the supported RC1 default and works without paid API keys. Keep `LLM_PROVIDER=mock` unless a provider plugin has been explicitly configured and tested.
