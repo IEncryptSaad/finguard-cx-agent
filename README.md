@@ -103,3 +103,49 @@ Run `apps/api/supabase/migrations/001_mvp_schema.sql` and `apps/api/supabase/see
 FinGuard CX Agent RC1 focuses on hardening the existing MVP without changing the architecture. The API is versioned under `/api/v1`, OpenAPI is available at `/api/v1/openapi.json`, standard error responses use the shared `ErrorResponse` shape, and mock mode remains the default so the app runs from a clean clone without paid API keys.
 
 See `docs/release-notes-rc1.md` for the RC1 readiness checklist, known limitations, and RC2/v1.0 roadmap.
+
+## Startup v1.0 (M1)
+
+This branch promotes FinGuard CX Agent from RC1 into a deployable v1.0 foundation:
+
+- Repository-backed persistence with local JSON/in-memory fallback and production Supabase fail-fast checks.
+- Auth/RBAC guards for admin and mutation routes using free-tier header auth (`X-FinGuard-Role`, `X-FinGuard-Actor`).
+- Provider-compatible SSE chat streaming (`message.delta`, `message.done`, `error`, `metadata`).
+- Standard API errors, provider health degradation, stronger PII/credential redaction, security headers, and production CORS validation.
+- Bounded pagination on list/admin endpoints.
+- Support workspace APIs for conversation details, message history, ticket assignment/status/priority/internal notes, AI draft display, and audit trail.
+- GitHub Actions for API tests, frontend type checks, and lint.
+
+### Local run
+
+```bash
+npm install
+pip install -r apps/api/requirements.txt
+npm run dev:api
+npm run dev:web
+```
+
+Mock LLM mode is the default and requires no API keys.
+
+### Tests
+
+```bash
+npm run test:api
+npm --workspace apps/web exec tsc -- --noEmit
+npm --workspace apps/web run lint
+```
+
+### Production environment
+
+Production requires Supabase/Postgres credentials and explicit CORS origins:
+
+```bash
+APP_ENV=production
+AUTH_REQUIRED=true
+SUPABASE_URL=https://...
+SUPABASE_SERVICE_ROLE_KEY=...
+CORS_ORIGINS=https://your-vercel-app.vercel.app
+LLM_PROVIDER=mock
+```
+
+See `docs/supabase-setup.md`, `docs/deployment.md`, `docs/security.md`, `docs/rbac.md`, and `docs/troubleshooting.md`.
