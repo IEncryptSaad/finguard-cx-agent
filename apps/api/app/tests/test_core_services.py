@@ -114,3 +114,28 @@ def test_chat_schema_root_references_chat_request_contract():
     assert request_schema["required"] == ["message"]
     assert request_schema["properties"]["message"]["minLength"] == 1
     assert request_schema["properties"]["message"]["maxLength"] == 4000
+
+def test_ticket_lifecycle_settings_plugins_analytics_and_knowledge_search():
+    client = TestClient(app)
+    chat = client.post("/api/v1/chat", json={"message": "I have fraud on my card"}).json()
+    ticket_id = chat["ticket_id"]
+    updated = client.patch(f"/api/v1/tickets/{ticket_id}", json={"status": "resolved"})
+    assert updated.status_code == 200
+    assert updated.json()["status"] == "resolved"
+
+    settings = client.get("/api/v1/settings")
+    assert settings.status_code == 200
+    assert settings.json()["active_ai_provider"] == "mock"
+
+    plugins = client.get("/api/v1/plugins")
+    assert plugins.status_code == 200
+    assert any(p["name"] == "demo_webhook" for p in plugins.json())
+
+    search = client.get("/api/v1/knowledge?q=dispute")
+    assert search.status_code == 200
+    assert search.json()
+
+    analytics = client.get("/api/v1/analytics")
+    assert analytics.status_code == 200
+    assert analytics.json()["total_conversations"] >= 1
+    assert "ai_provider_usage" in analytics.json()

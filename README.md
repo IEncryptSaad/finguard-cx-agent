@@ -70,6 +70,23 @@ Frontend environment variables live in `apps/web/.env.example`:
 
 Requests enter the versioned FastAPI router and are delegated to `AgentOrchestrator`. The orchestrator records conversation memory, redacts PII, applies guardrails and policy checks, renders prompt templates, calls the configured provider plugin, records audit events, and creates high-priority tickets when human handoff is required. Storage and external integrations are intentionally behind narrow service and plugin boundaries so premium AI providers, tools, integrations, knowledge sources, auth providers, analytics, and notifications can be installed without architectural rewrites. OpenAPI docs are available at `/api/v1/docs`.
 
+
+## MVP endpoint checklist
+
+- `POST /api/v1/chat` and `POST /api/v1/chat/stream` for customer support.
+- `GET /api/v1/conversations` and `/conversations/{id}/messages` for admin history.
+- `GET/POST/PATCH /api/v1/tickets` for lifecycle and human handoff.
+- `GET/POST/PUT/DELETE /api/v1/knowledge`, `GET /api/v1/knowledge?q=...`, and `POST /api/v1/knowledge/ingest` for TXT, Markdown, simple PDF text extraction, and DOCX ingestion.
+- `GET /api/v1/audit`, `/analytics`, `/settings`, `/plugins`, and `/health` for operations.
+
+## Documentation
+
+- Architecture: `docs/architecture.md`
+- Plugin guide: `docs/plugin-development.md`
+- Environment variables: `docs/environment.md`
+- Deployment: `docs/deployment.md`
+- Supabase schema: `apps/api/supabase/migrations/001_mvp_schema.sql` and `apps/api/supabase/seed.sql`
+
 ## Free-tier deployment
 
 - Deploy `apps/api` to a free Python-friendly platform with `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.

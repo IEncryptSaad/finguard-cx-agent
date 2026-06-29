@@ -1,11 +1,17 @@
 {
   "name": "finguard-cx-agent",
   "private": true,
-  "workspaces": ["apps/web", "packages/shared"],
+  "workspaces": [
+    "apps/web",
+    "packages/shared"
+  ],
   "scripts": {
     "dev:web": "npm --workspace apps/web run dev",
     "dev:api": "cd apps/api && uvicorn app.main:app --reload --port 8000",
-    "test:api": "cd apps/api && pytest"
+    "test:api": "cd apps/api && pytest",
+    "test": "npm run test:api"
   },
-  "devDependencies": {"typescript": "^5.5.4"}
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  }
 }
