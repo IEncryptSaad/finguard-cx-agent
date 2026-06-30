@@ -1,4 +1,4 @@
-import os
+import os, time
 from app.plugins.base import AIProvider, PluginMetadata
 
 class ProviderConfigurationError(RuntimeError): pass
@@ -14,12 +14,17 @@ class MockLLMProvider(LLMProvider):
 class DisabledHTTPProvider(LLMProvider):
     def __init__(self, name: str, env_key: str, endpoint_env: str | None = None):
         self.metadata = PluginMetadata(name=name, enabled=bool(os.getenv(env_key)), description=f"{name} adapter plugin")
-        self.env_key = env_key; self.endpoint_env = endpoint_env; self.capabilities = ["chat", "completion"]
+        self.env_key = env_key; self.endpoint_env = endpoint_env; self.capabilities = ["chat", "completion", "streaming"]
+        self.timeout_seconds = float(os.getenv(f"{name.upper()}_TIMEOUT_SECONDS", "20")); self.max_retries = int(os.getenv(f"{name.upper()}_MAX_RETRIES", "2"))
     async def complete(self, prompt: str, *, system_prompt: str | None = None) -> str:
         if not os.getenv(self.env_key):
             raise ProviderConfigurationError(f"{self.metadata.name} provider is disabled. Set {self.env_key} to enable it.")
         # Production boundary: real HTTP clients can be installed by plugin packages without changing orchestrator code.
         return f"{self.metadata.name} provider is configured but no transport plugin is installed."
+    async def stream(self, prompt: str, *, system_prompt: str | None = None):
+        text = await self.complete(prompt, system_prompt=system_prompt)
+        for token in text.split():
+            yield token + " "
 
 PROVIDER_FACTORIES = {
     "mock": lambda: MockLLMProvider(),
@@ -50,7 +55,10 @@ def provider_catalog() -> list[dict]:
             'description': p.metadata.description,
             'capabilities': getattr(p, 'capabilities', ['chat', 'completion']),
             'configuration': {'required_env': getattr(p, 'env_key', None), 'endpoint_env': getattr(p, 'endpoint_env', None)},
+            'timeout_seconds': getattr(p, 'timeout_seconds', 0),
+            'max_retries': getattr(p, 'max_retries', 0),
             'healthy': name == 'mock' or bool(p.metadata.enabled),
+            'estimated_cost_per_1k_tokens': 0,
         })
     return items
 
@@ -60,7 +68,8 @@ def provider_health(name: str) -> dict:
         return {'provider': key, 'status': 'unknown', 'healthy': False, 'reason': 'Provider is not registered'}
     p=PROVIDER_FACTORIES[key]()
     healthy = key == 'mock' or bool(p.metadata.enabled)
-    return {'provider': key, 'status': 'ok' if healthy else 'disabled', 'healthy': healthy, 'capabilities': getattr(p, 'capabilities', ['chat','completion'])}
+    started=time.perf_counter()
+    return {'provider': key, 'status': 'ok' if healthy else 'disabled', 'healthy': healthy, 'latency_ms': round((time.perf_counter()-started)*1000, 3), 'capabilities': getattr(p, 'capabilities', ['chat','completion'])}
 
 def route_provider(request) -> dict:
     preferred = (getattr(request, 'preferred_provider', None) or '').lower()

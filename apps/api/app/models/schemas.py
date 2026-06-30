@@ -150,16 +150,33 @@ class MemoryRecordCreate(BaseModel):
     scope: MemoryScope; key: str; value: dict; user_id: str | None = None; session_id: str | None = None; workspace_id: str = "default"
 
 class ActionDefinition(BaseModel):
-    name: str; category: str = "general"; description: str = ""; schema: dict = {}; permissions: list[str] = []; enabled: bool = True; lifecycle: str = Field(default="active", pattern="^(draft|active|deprecated|retired)$")
+    name: str; category: str = "general"; description: str = ""; schema: dict = {}; output_schema: dict = {}; permissions: list[str] = []; enabled: bool = True; lifecycle: str = Field(default="active", pattern="^(draft|active|deprecated|retired)$"); side_effect: str = Field(default="none", pattern="^(none|read|write|external|financial|destructive)$"); requires_approval: bool = False
 class ActionRunRequest(BaseModel):
-    payload: dict = {}; idempotency_key: str | None = None
+    payload: dict = {}; idempotency_key: str | None = None; approved: bool = False; actor_permissions: list[str] = []
 class ActionExecution(BaseModel):
-    id: str; action: str; status: str; input: dict; output: dict = {}; error: str | None = None; started_at: str; finished_at: str | None = None; attempts: int = 1
+    id: str; action: str; status: str; input: dict; output: dict = {}; error: str | None = None; started_at: str; finished_at: str | None = None; attempts: int = 1; side_effect: str = "none"; approval_required: bool = False
 
 class PromptTemplateCreate(BaseModel):
-    name: str; category: str = "general"; template: str = Field(min_length=1, max_length=8000); config: dict = {}; status: str = Field(default="draft", pattern="^(draft|active|retired)$")
+    name: str; category: str = "general"; template: str = Field(min_length=1, max_length=8000); config: dict = {}; status: str = Field(default="draft", pattern="^(draft|active|archived|retired)$"); evaluation_hooks: list[str] = []
 class PromptTemplate(PromptTemplateCreate):
     id: str; version: int = 1; created_at: str; updated_at: str
+
+class PromptStatusUpdate(BaseModel):
+    status: str = Field(pattern="^(draft|active|archived|retired)$")
+
+class RagChunk(BaseModel):
+    id: str; source_id: str; source_type: str = "knowledge_article"; chunk_index: int; text: str; metadata: dict = {}; permissions: list[str] = []; created_at: str
+class RagQueryRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=2000); top_k: int = Field(default=3, ge=1, le=10); allowed_permissions: list[str] = []
+class RagSourceCitation(BaseModel):
+    source_id: str; chunk_id: str; title: str | None = None; score: float; excerpt: str
+class RagQueryResponse(BaseModel):
+    answer: str; citations: list[RagSourceCitation]; grounded: bool; metadata: dict = {}
+
+class SecretRecord(BaseModel):
+    name: str; value: str; scope: str = "workspace"; workspace_id: str = "default"
+class EnterpriseProfile(BaseModel):
+    organization_id: str = "default-org"; workspace_id: str = "default"; deployment_profile: str = Field(default="free-tier", pattern="^(free-tier|growth|enterprise)$"); tenant_ready: bool = True
 
 class EventSubscription(BaseModel):
     id: str | None = None; event_type: str; target: str = "audit"; enabled: bool = True; created_at: str | None = None

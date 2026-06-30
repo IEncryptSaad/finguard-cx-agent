@@ -26,3 +26,20 @@ def get_prompt(prompt_id: str):
 
 def retire_prompt(prompt_id: str):
     p=get_prompt(prompt_id); p.status='retired'; p.updated_at=_now(); log_event('prompt.retired', {'prompt_id': prompt_id}); return p
+
+def set_prompt_status(prompt_id: str, status: str):
+    p=get_prompt(prompt_id)
+    if status == 'active':
+        for other in _PROMPTS.values():
+            if other.name == p.name and other.id != p.id and other.status == 'active':
+                other.status = 'archived'; other.updated_at = _now()
+    p.status=status; p.updated_at=_now(); log_event('prompt.status_changed', {'prompt_id': prompt_id, 'name': p.name, 'version': p.version, 'status': status}); return p
+
+def rollback_prompt(name: str, version: int):
+    seed_prompts()
+    match=next((p for p in _PROMPTS.values() if p.name == name and p.version == version), None)
+    if not match: raise HTTPException(status.HTTP_404_NOT_FOUND, detail='Prompt version not found')
+    return set_prompt_status(match.id, 'active')
+
+def prompt_history(name: str):
+    seed_prompts(); return sorted([p for p in _PROMPTS.values() if p.name == name], key=lambda p:p.version, reverse=True)

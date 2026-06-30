@@ -26,7 +26,7 @@ class AgentOrchestrator:
     async def handle_chat(self, message: str, conversation_id: str | None = None, user_id: str | None = None) -> ChatResponse:
         started = time.perf_counter()
         settings = get_app_settings()
-        existed_before_get_or_create = conversation_id is not None and conversation_exists(conversation_id)
+        existed_before_get_or_create = conversation_id is not None and conversation_exists(conversation_id) and bool(history(conversation_id))
         conv = get_or_create_conversation(conversation_id, user_id)
         is_new_conversation = not existed_before_get_or_create
         credential_clean, credential_redacted = redact_credentials(message)

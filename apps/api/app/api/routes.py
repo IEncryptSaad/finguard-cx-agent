@@ -207,3 +207,57 @@ def observability_health(user=Depends(require('analytics:read'))):
 def cost_usage(user=Depends(require('analytics:read'))):
     from app.services.platform_runtime import cost_usage
     return cost_usage()
+
+@router.get('/connectors')
+def connectors(user=Depends(require('settings:read'))):
+    from app.services.connectors import connector_catalog
+    return connector_catalog()
+@router.get('/connectors/{connector_name}/health')
+def connector_status(connector_name: str, user=Depends(require('settings:read'))):
+    from app.services.connectors import connector_health
+    return connector_health(connector_name)
+@router.post('/connectors/{connector_name}/test')
+def connector_test(connector_name: str, payload: dict|None=None, user=Depends(require('settings:write'))):
+    from app.services.connectors import test_connector
+    return test_connector(connector_name, payload)
+
+@router.post('/rag/index', response_model=list[RagChunk])
+def rag_index(user=Depends(require('knowledge:write'))):
+    from app.services.rag_runtime import rebuild_index
+    return rebuild_index()
+@router.post('/rag/query', response_model=RagQueryResponse)
+def rag_query(payload: RagQueryRequest, user=Depends(require('knowledge:read'))):
+    from app.services.rag_runtime import query_rag
+    return query_rag(payload)
+@router.get('/rag/stats')
+def rag_status(user=Depends(require('analytics:read'))):
+    from app.services.rag_runtime import rag_stats
+    return rag_stats()
+
+@router.patch('/prompts/{prompt_id}/status', response_model=PromptTemplate)
+def prompt_status(prompt_id: str, payload: PromptStatusUpdate, user=Depends(require('settings:write'))):
+    from app.services.prompt_runtime import set_prompt_status
+    return set_prompt_status(prompt_id, payload.status)
+@router.post('/prompts/{name}/rollback/{version}', response_model=PromptTemplate)
+def prompt_rollback(name: str, version: int, user=Depends(require('settings:write'))):
+    from app.services.prompt_runtime import rollback_prompt
+    return rollback_prompt(name, version)
+@router.get('/prompts/{name}/history', response_model=list[PromptTemplate])
+def prompt_versions(name: str, user=Depends(require('settings:read'))):
+    from app.services.prompt_runtime import prompt_history
+    return prompt_history(name)
+
+@router.get('/enterprise/profile', response_model=EnterpriseProfile)
+def enterprise_profile(user=Depends(require('settings:read'))):
+    return EnterpriseProfile()
+@router.post('/enterprise/secrets', response_model=SecretRecord)
+def enterprise_secret(payload: SecretRecord, user=Depends(require('settings:write'))):
+    from app.services.audit import log_event
+    log_event('secret.upserted', {'name': payload.name, 'scope': payload.scope, 'workspace_id': payload.workspace_id, 'redacted': True})
+    return SecretRecord(name=payload.name, value='[REDACTED_SECRET]', scope=payload.scope, workspace_id=payload.workspace_id)
+@router.post('/privacy/export')
+def privacy_export(payload: dict, user=Depends(require('admin:read'))):
+    return {'status': 'queued', 'workflow': 'privacy_export', 'subject_id': payload.get('subject_id'), 'free_tier_demo': True}
+@router.post('/privacy/delete')
+def privacy_delete(payload: dict, user=Depends(require('admin:read'))):
+    return {'status': 'queued', 'workflow': 'privacy_delete', 'subject_id': payload.get('subject_id'), 'requires_review': True}

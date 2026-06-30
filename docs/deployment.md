@@ -48,3 +48,9 @@ Mock mode is the supported RC1 default and works without paid API keys. Keep `LL
 4. **Auth:** send `X-FinGuard-Role`/`X-FinGuard-Actor` from any admin integration while the free-tier header shim is in use.
 5. **Mock LLM:** keep `LLM_PROVIDER=mock` to avoid paid APIs. Non-mock providers safely report degraded/unconfigured status if keys are missing.
 6. **Validation:** check `/api/v1/health`, run customer chat, and verify admin routes require auth in production.
+
+## Enterprise foundation deployment notes
+
+The enterprise extension layer is free-tier safe by default. External AI providers and SaaS connectors are disabled unless their environment variables are present. Use the `free-tier` deployment profile for local demos and small pilots; reserve `growth` and `enterprise` profiles for future managed infrastructure.
+
+Backups can start with Supabase/Postgres exports or repository-level seed files. Restore by applying migrations, loading seed data, and reconfiguring redacted secrets from the deployment environment. Do not store raw production secrets in source control.
