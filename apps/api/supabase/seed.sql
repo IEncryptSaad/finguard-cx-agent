@@ -17,7 +17,28 @@ insert into audit_logs (event_type, payload) values
   ('demo.workflow.ready', '{"workflow":"card_dispute_triage","roles":["customer","agent","admin"]}'::jsonb)
 on conflict do nothing;
 
-insert into tickets (conversation_id, summary, status, priority, assignee, internal_notes) values
-  ('demo-conv-card-dispute','Demo card dispute needs agent review','open','high','agent-demo','Seeded for product demo walkthrough'),
-  ('demo-conv-transfer-delay','Demo ACH transfer delay follow-up','open','medium','agent-demo','Use to demonstrate ticket filtering and audit trail')
+insert into conversations (id, status) values
+  ('11111111-1111-4111-8111-111111111111','open'),
+  ('22222222-2222-4222-8222-222222222222','open')
+on conflict do nothing;
+
+insert into tickets (id, conversation_id, summary, status, priority, assignee, internal_notes) values
+  (
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    '11111111-1111-4111-8111-111111111111',
+    'Demo card dispute needs agent review',
+    'open',
+    'high',
+    'agent-demo',
+    '[{"type":"demo_note","body":"Seeded for product demo walkthrough","created_by":"system"}]'::jsonb
+  ),
+  (
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    '22222222-2222-4222-8222-222222222222',
+    'Demo ACH transfer delay follow-up',
+    'open',
+    'medium',
+    'agent-demo',
+    '[{"type":"demo_note","body":"Use to demonstrate ticket filtering and audit trail","created_by":"system"}]'::jsonb
+  )
 on conflict do nothing;

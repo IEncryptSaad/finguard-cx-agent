@@ -76,3 +76,33 @@ def test_release_knowledge_ingestion_and_connector_smoke():
     assert connectors.status_code == 200
     names = {connector['name'] for connector in connectors.json()}
     assert {'webhook', 'email', 'slack'}.issubset(names)
+
+
+def test_supabase_seed_ticket_rows_match_current_schema():
+    import json
+    import re
+    import uuid
+    from pathlib import Path
+
+    seed_sql = Path(__file__).resolve().parents[2] / 'supabase' / 'seed.sql'
+    sql = seed_sql.read_text()
+
+    conversations_sql = re.search(r"insert into conversations \(id, status\) values([\s\S]*?)on conflict do nothing;", sql)
+    assert conversations_sql is not None
+    seeded_conversation_ids = set(re.findall(r"'([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})'", conversations_sql.group(1)))
+
+    ticket_sql = re.search(r"insert into tickets \(id, conversation_id, summary, status, priority, assignee, internal_notes\) values([\s\S]*?)on conflict do nothing;", sql)
+    assert ticket_sql is not None
+
+    ticket_conversation_ids = re.findall(r"\n\s*'([0-9a-f-]{36})',\n\s*'([0-9a-f-]{36})',", ticket_sql.group(1))
+    assert ticket_conversation_ids
+    for ticket_id, conversation_id in ticket_conversation_ids:
+        uuid.UUID(ticket_id)
+        uuid.UUID(conversation_id)
+        assert conversation_id in seeded_conversation_ids
+
+    internal_notes = re.findall(r"('(\[.*?\]|\{.*?\})'::jsonb)", ticket_sql.group(1))
+    assert internal_notes
+    for _, note_json in internal_notes:
+        parsed = json.loads(note_json)
+        assert isinstance(parsed, (list, dict))
