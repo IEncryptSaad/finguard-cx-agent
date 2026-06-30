@@ -3,6 +3,7 @@ from app.services.guardrails import GuardrailDecision
 from typing import Any
 from app.services.security import redact_text, sanitize
 CREDENTIAL_PLACEHOLDER = "[REDACTED_CREDENTIAL]"
+_CREDENTIAL_KEY_PATTERN = re.compile(r"(?:password|passcode|pin|api[_ -]?key|secret|token|private[_ -]?key)", re.IGNORECASE)
 _CREDENTIAL_PATTERNS = [
     re.compile(
         r"\b((?:reset\s+)?(?:password|passcode|pin)|api[_ -]?key|secret|token)\b"
@@ -40,8 +41,8 @@ def sanitize_sensitive(value: Any) -> Any:
         sanitized: dict[str, Any] = {}
         for key, item in value.items():
             skey = str(key)
-            if isinstance(item, str) and re.search(r"(?:password|passcode|pin|api[_ -]?key|secret|token)", skey, re.I):
-                sanitized[skey] = redact_credentials(f"{skey} is {item}")[0].split(" ", 1)[-1]
+            if isinstance(item, str) and _CREDENTIAL_KEY_PATTERN.search(skey):
+                sanitized[skey] = CREDENTIAL_PLACEHOLDER
             else:
                 sanitized[skey] = sanitize_sensitive(item)
         return sanitize(sanitized)

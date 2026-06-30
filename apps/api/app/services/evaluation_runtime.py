@@ -11,7 +11,12 @@ def list_datasets(): return list(_DATASETS.values())
 def run_evaluation(req: EvaluationRunRequest):
     ds = _DATASETS.get(req.dataset_id)
     total = len(ds.items) if ds else 0
-    passed = sum(1 for item in (ds.items if ds else []) if item.get('expected') in item.get('actual', item.get('input','')))
+    passed = 0
+    for item in (ds.items if ds else []):
+        expected = item.get('expected')
+        actual = item.get('actual') if item.get('actual') is not None else item.get('input', '')
+        if isinstance(expected, str) and isinstance(actual, str) and expected in actual:
+            passed += 1
     score = round(passed / total, 2) if total else 0
     run = EvaluationRun(id=str(uuid4()), dataset_id=req.dataset_id, status='completed', score=score, metrics={'total': total, 'passed': passed}, created_at=_now())
     _RUNS.append(run); log_event('evaluation.completed', {'dataset_id': req.dataset_id, 'score': score}); return run

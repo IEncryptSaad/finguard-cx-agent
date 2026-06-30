@@ -71,3 +71,49 @@ def test_evaluation_dataset_rejects_malformed_items():
     for payload in malformed_payloads:
         response = client.post('/api/v1/evaluations/datasets', json=payload)
         assert response.status_code == 422
+
+
+def test_memory_credential_like_keys_redact_values_directly():
+    client = TestClient(app)
+    sensitive = {
+        'access_token': 'access-token-secret-value',
+        'client_secret': 'client-secret-value',
+        'refresh_token': 'refresh-token-secret-value',
+        'id_token': 'id-token-secret-value',
+        'api_key': 'api-key-secret-value',
+        'secret_key': 'secret-key-secret-value',
+        'private_key': 'private-key-secret-value',
+    }
+    response = client.post('/api/v1/memory', json={'scope': 'user', 'key': 'credential-keys', 'value': sensitive, 'user_id': 'credential-key-user'})
+    assert response.status_code == 200
+    assert response.json()['value'] == {key: '[REDACTED_CREDENTIAL]' for key in sensitive}
+
+    records = client.get('/api/v1/memory?scope=user&user_id=credential-key-user')
+    assert records.status_code == 200
+    body = response.text + records.text
+    for secret in sensitive.values():
+        assert secret not in body
+
+
+def test_evaluation_dataset_rejects_actual_null():
+    client = TestClient(app)
+    response = client.post('/api/v1/evaluations/datasets', json={'name': 'actual-null', 'items': [{'input': 'hello', 'expected': 'hello', 'actual': None}]})
+    assert response.status_code == 422
+
+
+def test_evaluation_missing_actual_uses_input_safely():
+    client = TestClient(app)
+    dataset = client.post('/api/v1/evaluations/datasets', json={'name': 'missing-actual', 'items': [{'input': 'hello world', 'expected': 'hello'}]})
+    assert dataset.status_code == 200
+    run = client.post('/api/v1/evaluations/runs', json={'dataset_id': dataset.json()['id']})
+    assert run.status_code == 200
+    assert run.json()['metrics']['passed'] == 1
+
+
+def test_evaluation_valid_actual_is_used_safely():
+    client = TestClient(app)
+    dataset = client.post('/api/v1/evaluations/datasets', json={'name': 'valid-actual', 'items': [{'input': 'input text', 'expected': 'needle', 'actual': 'actual needle text'}]})
+    assert dataset.status_code == 200
+    run = client.post('/api/v1/evaluations/runs', json={'dataset_id': dataset.json()['id']})
+    assert run.status_code == 200
+    assert run.json()['score'] == 1

@@ -181,9 +181,12 @@ class EvaluationDataset(BaseModel):
                 value = cleaned.get(field)
                 if not isinstance(value, str) or not value.strip():
                     raise ValueError(f"evaluation dataset item.{field} must be a non-empty string")
-            actual = cleaned.get("actual")
-            if actual is not None and not isinstance(actual, str):
-                raise ValueError("evaluation dataset item.actual must be a string when provided")
+            if "actual" in cleaned:
+                actual = cleaned["actual"]
+                if actual is None:
+                    raise ValueError("evaluation dataset item.actual must not be null when provided")
+                if not isinstance(actual, str):
+                    raise ValueError("evaluation dataset item.actual must be a string when provided")
             validated.append(cleaned)
         return validated
 class EvaluationRunRequest(BaseModel):
