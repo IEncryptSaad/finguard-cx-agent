@@ -103,6 +103,27 @@ def test_supabase_seed_ticket_rows_match_current_schema():
 
     internal_notes = re.findall(r"('(\[.*?\]|\{.*?\})'::jsonb)", ticket_sql.group(1))
     assert internal_notes
+    from app.models.schemas import Ticket
+
     for _, note_json in internal_notes:
         parsed = json.loads(note_json)
-        assert isinstance(parsed, (list, dict))
+        assert isinstance(parsed, list)
+        assert parsed
+        assert all(isinstance(note, str) and note for note in parsed)
+
+    ticket_rows = re.findall(
+        r"\(\s*'([^']+)',\s*'([^']+)',\s*'([^']+)',\s*'([^']+)',\s*'([^']+)',\s*'([^']+)',\s*'(\[.*?\])'::jsonb\s*\)",
+        ticket_sql.group(1),
+        flags=re.S,
+    )
+    assert ticket_rows
+    for ticket_id, conversation_id, summary, status, priority, assignee, note_json in ticket_rows:
+        Ticket(
+            id=ticket_id,
+            conversation_id=conversation_id,
+            summary=summary,
+            status=status,
+            priority=priority,
+            assignee=assignee,
+            internal_notes=json.loads(note_json),
+        )

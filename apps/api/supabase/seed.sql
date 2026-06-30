@@ -30,7 +30,7 @@ insert into tickets (id, conversation_id, summary, status, priority, assignee, i
     'open',
     'high',
     'agent-demo',
-    '[{"type":"demo_note","body":"Seeded for product demo walkthrough","created_by":"system"}]'::jsonb
+    '["Demo note: seeded for product demo walkthrough."]'::jsonb
   ),
   (
     'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
@@ -39,6 +39,6 @@ insert into tickets (id, conversation_id, summary, status, priority, assignee, i
     'open',
     'medium',
     'agent-demo',
-    '[{"type":"demo_note","body":"Use to demonstrate ticket filtering and audit trail","created_by":"system"}]'::jsonb
+    '["Demo note: use to demonstrate ticket filtering and audit trail."]'::jsonb
   )
 on conflict do nothing;
