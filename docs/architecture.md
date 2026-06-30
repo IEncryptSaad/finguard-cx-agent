@@ -23,3 +23,9 @@ Dependency direction should remain: `apps/web -> apps/api HTTP contracts -> app/
 - SSE streaming emits provider-compatible events: `metadata`, `message.delta`, `message.done`, and `error`; non-streaming `/chat` remains backward compatible.
 - Redaction is centralized in `app.services.security` and is applied before prompts, memory, audit payloads, ticket summaries, workflow contexts, and analytics data.
 - List endpoints support bounded pagination (`paginated=true&page=1&page_size=50`) while preserving legacy list responses by default.
+
+## Platform v1 runtime layer
+
+FinGuard v1 keeps customer support as one application on top of reusable runtimes. The backend exposes optional, free-tier platform services for provider discovery/routing, scoped memory, actions, prompts, events, evaluations, observability, and cost telemetry. These runtimes use in-process defaults with repository-backed persistence hooks so future paid providers, vector memory, queues, billing, and enterprise controls can be added through providers, plugins, connectors, and adapters without replacing current modules.
+
+New platform APIs are grouped under `/api/v1/providers`, `/api/v1/memory`, `/api/v1/actions`, `/api/v1/prompts`, `/api/v1/events`, `/api/v1/evaluations`, `/api/v1/observability`, and `/api/v1/cost`. Customer Support, Product Intelligence, Customer Success, Internal Assistant, and Operations Assistant should call these runtime APIs/services rather than duplicating business logic.

@@ -134,3 +134,41 @@ class MarketplaceInstallRequest(BaseModel):
     enabled: bool = True
 class MarketplacePlugin(BaseModel):
     name: str; kind: str; enabled: bool; description: str = ""
+
+class ProviderRouteRequest(BaseModel):
+    capability: str = "chat"
+    preferred_provider: str | None = None
+    require_healthy: bool = True
+class ProviderRouteResponse(BaseModel):
+    provider: str; capability: str; reason: str; failover: list[str] = []
+
+class MemoryScope(StrEnum):
+    conversation = "conversation"; user = "user"; session = "session"; workspace = "workspace"
+class MemoryRecord(BaseModel):
+    id: str | None = None; scope: MemoryScope; key: str; value: dict; user_id: str | None = None; session_id: str | None = None; workspace_id: str = "default"; created_at: str | None = None; updated_at: str | None = None
+class MemoryRecordCreate(BaseModel):
+    scope: MemoryScope; key: str; value: dict; user_id: str | None = None; session_id: str | None = None; workspace_id: str = "default"
+
+class ActionDefinition(BaseModel):
+    name: str; category: str = "general"; description: str = ""; schema: dict = {}; permissions: list[str] = []; enabled: bool = True; lifecycle: str = Field(default="active", pattern="^(draft|active|deprecated|retired)$")
+class ActionRunRequest(BaseModel):
+    payload: dict = {}; idempotency_key: str | None = None
+class ActionExecution(BaseModel):
+    id: str; action: str; status: str; input: dict; output: dict = {}; error: str | None = None; started_at: str; finished_at: str | None = None; attempts: int = 1
+
+class PromptTemplateCreate(BaseModel):
+    name: str; category: str = "general"; template: str = Field(min_length=1, max_length=8000); config: dict = {}; status: str = Field(default="draft", pattern="^(draft|active|retired)$")
+class PromptTemplate(PromptTemplateCreate):
+    id: str; version: int = 1; created_at: str; updated_at: str
+
+class EventSubscription(BaseModel):
+    id: str | None = None; event_type: str; target: str = "audit"; enabled: bool = True; created_at: str | None = None
+class EventPublishRequest(BaseModel):
+    event_type: str; payload: dict = {}; async_processing: bool = True
+
+class EvaluationDataset(BaseModel):
+    id: str | None = None; name: str; items: list[dict] = []; created_at: str | None = None
+class EvaluationRunRequest(BaseModel):
+    dataset_id: str; provider: str = "mock"; benchmark: str = "quality"
+class EvaluationRun(BaseModel):
+    id: str; dataset_id: str; status: str; score: float; metrics: dict; created_at: str

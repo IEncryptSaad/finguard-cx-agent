@@ -44,3 +44,28 @@ def history(conversation_id: str) -> list[ConversationMessage]:
     return [m for m in _MESSAGES if m.conversation_id == conversation_id]
 
 def conversations() -> list[Conversation]: return list(_CONVERSATIONS.values())
+
+# Generic memory runtime: scoped key/value records with a provider-compatible shape.
+from app.models.schemas import MemoryRecord, MemoryRecordCreate, MemoryScope
+_MEMORY_RECORDS: dict[str, MemoryRecord] = {}
+
+def upsert_memory_record(payload: MemoryRecordCreate) -> MemoryRecord:
+    now = datetime.now(timezone.utc).isoformat()
+    rid = f"{payload.scope}:{payload.workspace_id}:{payload.user_id or payload.session_id or 'global'}:{payload.key}"
+    existing = _MEMORY_RECORDS.get(rid)
+    record = MemoryRecord(id=rid, scope=payload.scope, key=payload.key, value=payload.value, user_id=payload.user_id, session_id=payload.session_id, workspace_id=payload.workspace_id, created_at=existing.created_at if existing else now, updated_at=now)
+    _MEMORY_RECORDS[rid] = record
+    try:
+        from app.services.repository import get_repository
+        get_repository().put('memory_records', rid, record.model_dump())
+    except Exception: pass
+    return record
+
+def list_memory_records(scope: MemoryScope|None=None, key: str|None=None, user_id: str|None=None) -> list[MemoryRecord]:
+    if not _MEMORY_RECORDS:
+        try:
+            from app.services.repository import get_repository
+            for r in get_repository().list('memory_records'):
+                rec=MemoryRecord(**r); _MEMORY_RECORDS[rec.id or rec.key]=rec
+        except Exception: pass
+    return [r for r in _MEMORY_RECORDS.values() if (scope is None or r.scope == scope) and (key is None or r.key == key) and (user_id is None or r.user_id == user_id)]
