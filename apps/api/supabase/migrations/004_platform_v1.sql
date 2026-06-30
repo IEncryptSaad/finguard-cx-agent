@@ -1,0 +1,13 @@
+-- Platform v1 runtime extensions: optional reusable platform tables.
+create table if not exists memory_records (id text primary key, scope text not null, key text not null, value jsonb not null default '{}', user_id text, session_id text, workspace_id text not null default 'default', created_at timestamptz not null default now(), updated_at timestamptz not null default now());
+create table if not exists action_definitions (name text primary key, category text not null default 'general', description text not null default '', schema jsonb not null default '{}', permissions jsonb not null default '[]', enabled boolean not null default true, lifecycle text not null default 'active', updated_at timestamptz not null default now());
+create table if not exists action_executions (id uuid primary key default gen_random_uuid(), action text not null, status text not null, input jsonb not null default '{}', output jsonb not null default '{}', error text, started_at timestamptz not null default now(), finished_at timestamptz, attempts integer not null default 1);
+create table if not exists prompt_templates (id uuid primary key default gen_random_uuid(), name text not null, category text not null default 'general', template text not null, config jsonb not null default '{}', status text not null default 'draft', version integer not null default 1, created_at timestamptz not null default now(), updated_at timestamptz not null default now());
+create table if not exists event_subscriptions (id uuid primary key default gen_random_uuid(), event_type text not null, target text not null default 'audit', enabled boolean not null default true, created_at timestamptz not null default now());
+create table if not exists evaluation_datasets (id uuid primary key default gen_random_uuid(), name text not null, items jsonb not null default '[]', created_at timestamptz not null default now());
+create table if not exists evaluation_runs (id uuid primary key default gen_random_uuid(), dataset_id text not null, status text not null, score numeric not null default 0, metrics jsonb not null default '{}', created_at timestamptz not null default now());
+create index if not exists idx_memory_records_scope_user on memory_records(scope, user_id, workspace_id);
+create index if not exists idx_action_executions_action_started on action_executions(action, started_at desc);
+create index if not exists idx_prompt_templates_name_version on prompt_templates(name, version desc);
+create index if not exists idx_event_subscriptions_type on event_subscriptions(event_type) where enabled = true;
+create index if not exists idx_evaluation_runs_dataset_created on evaluation_runs(dataset_id, created_at desc);

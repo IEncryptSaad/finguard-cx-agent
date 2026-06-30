@@ -7,13 +7,14 @@ class LLMProvider(AIProvider): pass
 
 class MockLLMProvider(LLMProvider):
     metadata = PluginMetadata(name="mock", enabled=True, description="Deterministic free mock provider")
+    capabilities = ["chat", "completion", "classification", "summarization"]
     async def complete(self, prompt: str, *, system_prompt: str | None = None) -> str:
         return "I can help with that. I have noted the details securely and will guide you through the next support step."
 
 class DisabledHTTPProvider(LLMProvider):
     def __init__(self, name: str, env_key: str, endpoint_env: str | None = None):
         self.metadata = PluginMetadata(name=name, enabled=bool(os.getenv(env_key)), description=f"{name} adapter plugin")
-        self.env_key = env_key; self.endpoint_env = endpoint_env
+        self.env_key = env_key; self.endpoint_env = endpoint_env; self.capabilities = ["chat", "completion"]
     async def complete(self, prompt: str, *, system_prompt: str | None = None) -> str:
         if not os.getenv(self.env_key):
             raise ProviderConfigurationError(f"{self.metadata.name} provider is disabled. Set {self.env_key} to enable it.")
@@ -38,3 +39,36 @@ def provider_from_name(name: str) -> LLMProvider:
     if key != "mock" and not provider.metadata.enabled:
         raise ProviderConfigurationError(f"Provider '{key}' is installed but disabled; configure its environment variables.")
     return provider
+
+def provider_catalog() -> list[dict]:
+    items = []
+    for name, factory in PROVIDER_FACTORIES.items():
+        p = factory()
+        items.append({
+            'name': name,
+            'enabled': bool(p.metadata.enabled),
+            'description': p.metadata.description,
+            'capabilities': getattr(p, 'capabilities', ['chat', 'completion']),
+            'configuration': {'required_env': getattr(p, 'env_key', None), 'endpoint_env': getattr(p, 'endpoint_env', None)},
+            'healthy': name == 'mock' or bool(p.metadata.enabled),
+        })
+    return items
+
+def provider_health(name: str) -> dict:
+    key=(name or 'mock').lower()
+    if key not in PROVIDER_FACTORIES:
+        return {'provider': key, 'status': 'unknown', 'healthy': False, 'reason': 'Provider is not registered'}
+    p=PROVIDER_FACTORIES[key]()
+    healthy = key == 'mock' or bool(p.metadata.enabled)
+    return {'provider': key, 'status': 'ok' if healthy else 'disabled', 'healthy': healthy, 'capabilities': getattr(p, 'capabilities', ['chat','completion'])}
+
+def route_provider(request) -> dict:
+    preferred = (getattr(request, 'preferred_provider', None) or '').lower()
+    catalog = provider_catalog()
+    candidates = [p for p in catalog if getattr(request, 'capability', 'chat') in p['capabilities']]
+    if getattr(request, 'require_healthy', True): candidates = [p for p in candidates if p['healthy']]
+    if preferred:
+        match = next((p for p in candidates if p['name'] == preferred), None)
+        if match: return {'provider': match['name'], 'capability': request.capability, 'reason': 'preferred provider matched', 'failover': [p['name'] for p in candidates if p['name'] != match['name']]}
+    selected = next((p for p in candidates if p['name'] == 'mock'), candidates[0] if candidates else {'name':'mock'})
+    return {'provider': selected['name'], 'capability': request.capability, 'reason': 'free-tier healthy failover route', 'failover': [p['name'] for p in candidates if p['name'] != selected['name']]}

@@ -112,3 +112,98 @@ def admin_summary(user=Depends(require('admin:read'))):
 def health():
     s=get_app_settings(); degraded = s.active_ai_provider!='mock'
     return {'status': 'degraded' if degraded else 'ok', 'version':'v1.0.0', 'provider': s.active_ai_provider, 'persistence': active_backend()}
+
+@router.get('/providers')
+def providers(user=Depends(require('settings:read'))):
+    from app.agent.llm import provider_catalog
+    return provider_catalog()
+@router.get('/providers/{provider_name}/health')
+def provider_health(provider_name: str, user=Depends(require('settings:read'))):
+    from app.agent.llm import provider_health as ph
+    return ph(provider_name)
+@router.post('/providers/route', response_model=ProviderRouteResponse)
+def provider_route(payload: ProviderRouteRequest, user=Depends(require('settings:read'))):
+    from app.agent.llm import route_provider
+    return route_provider(payload)
+
+@router.get('/memory', response_model=list[MemoryRecord])
+def memory_list(scope: MemoryScope|None=None, key: str|None=None, user_id: str|None=None, user=Depends(require('conversation:read'))):
+    from app.services.memory import list_memory_records
+    return list_memory_records(scope, key, user_id)
+@router.post('/memory', response_model=MemoryRecord)
+def memory_put(payload: MemoryRecordCreate, user=Depends(require('conversation:read'))):
+    from app.services.memory import upsert_memory_record
+    return upsert_memory_record(payload)
+
+@router.get('/actions', response_model=list[ActionDefinition])
+def actions(user=Depends(require('settings:read'))):
+    from app.services.action_runtime import list_actions
+    return list_actions()
+@router.post('/actions', response_model=ActionDefinition)
+def action_register(payload: ActionDefinition, user=Depends(require('settings:write'))):
+    from app.services.action_runtime import upsert_action
+    return upsert_action(payload)
+@router.post('/actions/{action_name}/run', response_model=ActionExecution)
+def action_run(action_name: str, payload: ActionRunRequest, user=Depends(require('workflow:write'))):
+    from app.services.action_runtime import run_action
+    return run_action(action_name, payload)
+@router.get('/actions/{action_name}/executions', response_model=list[ActionExecution])
+def action_executions(action_name: str, user=Depends(require('workflow:read'))):
+    from app.services.action_runtime import action_history
+    return action_history(action_name)
+
+@router.get('/prompts', response_model=list[PromptTemplate])
+def prompts(category: str|None=None, user=Depends(require('settings:read'))):
+    from app.services.prompt_runtime import list_prompts
+    return list_prompts(category)
+@router.post('/prompts', response_model=PromptTemplate)
+def prompt_create(payload: PromptTemplateCreate, user=Depends(require('settings:write'))):
+    from app.services.prompt_runtime import create_prompt
+    return create_prompt(payload)
+@router.delete('/prompts/{prompt_id}', response_model=PromptTemplate)
+def prompt_retire(prompt_id: str, user=Depends(require('settings:write'))):
+    from app.services.prompt_runtime import retire_prompt
+    return retire_prompt(prompt_id)
+
+@router.get('/events/registry')
+def event_registry(user=Depends(require('settings:read'))):
+    from app.services.event_runtime import registry
+    return registry()
+@router.get('/events/subscriptions', response_model=list[EventSubscription])
+def event_subscriptions(user=Depends(require('settings:read'))):
+    from app.services.event_runtime import list_subscriptions
+    return list_subscriptions()
+@router.post('/events/subscriptions', response_model=EventSubscription)
+def event_subscribe(payload: EventSubscription, user=Depends(require('settings:write'))):
+    from app.services.event_runtime import subscribe
+    return subscribe(payload)
+@router.post('/events/publish')
+def event_publish(payload: EventPublishRequest, user=Depends(require('settings:write'))):
+    from app.services.event_runtime import publish
+    return publish(payload)
+
+@router.get('/evaluations/datasets', response_model=list[EvaluationDataset])
+def evaluation_datasets(user=Depends(require('analytics:read'))):
+    from app.services.evaluation_runtime import list_datasets
+    return list_datasets()
+@router.post('/evaluations/datasets', response_model=EvaluationDataset)
+def evaluation_dataset_create(payload: EvaluationDataset, user=Depends(require('analytics:write'))):
+    from app.services.evaluation_runtime import create_dataset
+    return create_dataset(payload)
+@router.post('/evaluations/runs', response_model=EvaluationRun)
+def evaluation_run(payload: EvaluationRunRequest, user=Depends(require('analytics:write'))):
+    from app.services.evaluation_runtime import run_evaluation
+    return run_evaluation(payload)
+@router.get('/evaluations/runs', response_model=list[EvaluationRun])
+def evaluation_runs(user=Depends(require('analytics:read'))):
+    from app.services.evaluation_runtime import list_runs
+    return list_runs()
+
+@router.get('/observability/health')
+def observability_health(user=Depends(require('analytics:read'))):
+    from app.services.platform_runtime import platform_health
+    return platform_health()
+@router.get('/cost/usage')
+def cost_usage(user=Depends(require('analytics:read'))):
+    from app.services.platform_runtime import cost_usage
+    return cost_usage()
