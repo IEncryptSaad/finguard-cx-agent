@@ -58,3 +58,98 @@ def test_redaction_positive_and_false_positive_examples():
     harmless, changed = redact_pii('Order 12345 ships on 2026-06-29 and ticket ABC-123 remains open.')
     assert changed is False
     assert '12345' in harmless and 'ABC-123' in harmless
+
+
+def test_auth_required_anonymous_chat_returns_401(monkeypatch):
+    monkeypatch.setenv('AUTH_REQUIRED', 'true')
+    from app.core.config import get_settings
+    get_settings.cache_clear()
+    try:
+        client = TestClient(app)
+        assert client.post('/api/v1/chat', json={'message': 'hello'}).status_code == 401
+    finally:
+        monkeypatch.delenv('AUTH_REQUIRED', raising=False)
+        get_settings.cache_clear()
+
+
+def test_production_anonymous_chat_requires_auth_unless_public_enabled(monkeypatch):
+    monkeypatch.setenv('APP_ENV', 'production')
+    monkeypatch.delenv('PUBLIC_CUSTOMER_CHAT', raising=False)
+    from app.core.config import get_settings
+    get_settings.cache_clear()
+    try:
+        client = TestClient(app)
+        assert client.post('/api/v1/chat', json={'message': 'hello'}).status_code == 401
+
+        monkeypatch.setenv('PUBLIC_CUSTOMER_CHAT', 'true')
+        get_settings.cache_clear()
+        assert client.post('/api/v1/chat', json={'message': 'hello'}).status_code == 200
+    finally:
+        monkeypatch.delenv('APP_ENV', raising=False)
+        monkeypatch.delenv('PUBLIC_CUSTOMER_CHAT', raising=False)
+        get_settings.cache_clear()
+
+
+def test_authorized_user_can_chat_when_auth_required(monkeypatch):
+    monkeypatch.setenv('AUTH_REQUIRED', 'true')
+    from app.core.config import get_settings
+    get_settings.cache_clear()
+    try:
+        client = TestClient(app)
+        response = client.post('/api/v1/chat', headers={'X-FinGuard-Role': 'customer'}, json={'message': 'hello'})
+        assert response.status_code == 200
+    finally:
+        monkeypatch.delenv('AUTH_REQUIRED', raising=False)
+        get_settings.cache_clear()
+
+
+def test_streaming_chat_uses_same_auth_rule(monkeypatch):
+    monkeypatch.setenv('AUTH_REQUIRED', 'true')
+    from app.core.config import get_settings
+    get_settings.cache_clear()
+    try:
+        client = TestClient(app)
+        assert client.post('/api/v1/chat/stream', json={'message': 'hello'}).status_code == 401
+        with client.stream('POST', '/api/v1/chat/stream', headers={'X-FinGuard-Role': 'customer'}, json={'message': 'hello'}) as response:
+            body = ''.join(response.iter_text())
+        assert response.status_code == 200
+        assert 'event: message.done' in body
+    finally:
+        monkeypatch.delenv('AUTH_REQUIRED', raising=False)
+        get_settings.cache_clear()
+
+
+def test_repository_backend_selection(monkeypatch):
+    from app.core.config import get_settings
+    from app.services import repository
+    from app.db.supabase import SupabaseRepository
+
+    previous = repository._REPO
+    try:
+        repository._REPO = None
+        monkeypatch.setenv('SUPABASE_URL', 'https://example.supabase.co')
+        monkeypatch.setenv('SUPABASE_SERVICE_ROLE_KEY', 'service-role')
+        get_settings.cache_clear()
+        assert isinstance(repository.get_repository(), SupabaseRepository)
+        assert repository.active_backend() == 'supabase'
+
+        repository._REPO = None
+        monkeypatch.delenv('SUPABASE_URL', raising=False)
+        monkeypatch.delenv('SUPABASE_SERVICE_ROLE_KEY', raising=False)
+        monkeypatch.setenv('FINGUARD_REPOSITORY', 'memory')
+        get_settings.cache_clear()
+        assert repository.active_backend() == 'memory'
+    finally:
+        repository._REPO = previous
+        monkeypatch.delenv('SUPABASE_URL', raising=False)
+        monkeypatch.delenv('SUPABASE_SERVICE_ROLE_KEY', raising=False)
+        monkeypatch.delenv('FINGUARD_REPOSITORY', raising=False)
+        get_settings.cache_clear()
+
+
+def test_docs_csp_allows_swagger_assets_but_api_stays_strict():
+    client = TestClient(app)
+    docs_csp = client.get('/api/v1/docs').headers['content-security-policy']
+    assert 'cdn.jsdelivr.net' in docs_csp
+    assert "'unsafe-inline'" in docs_csp
+    assert client.get('/api/v1/health').headers['content-security-policy'] == "default-src 'self'"

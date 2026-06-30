@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     rate_limit_per_minute: int = 60
     auth_required: bool = False
+    public_customer_chat: bool = False
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 @lru_cache
 def get_settings() -> Settings:

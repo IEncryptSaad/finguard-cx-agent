@@ -13,6 +13,7 @@ class AppRepository:
     def delete(self, table: str, key: str) -> None: raise NotImplementedError
 
 class JsonRepository(AppRepository):
+    backend = 'json'
     def __init__(self, path: str | None = None):
         self.path = Path(path or os.getenv('FINGUARD_DATA_FILE', '.finguard-data.json'))
         self.data: dict[str, Any] = {}
@@ -29,6 +30,7 @@ class JsonRepository(AppRepository):
         self.data.setdefault(table, {}).pop(key, None); self._save()
 
 class InMemoryRepository(JsonRepository):
+    backend = 'memory'
     def __init__(self): self.data = {}
     def _save(self): pass
 
@@ -40,8 +42,18 @@ def get_repository() -> AppRepository:
         s = get_settings()
         if s.app_env == 'production' and not (s.supabase_url and s.supabase_service_role_key):
             raise RepositoryError('Production persistence requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY')
-        _REPO = InMemoryRepository() if os.getenv('FINGUARD_REPOSITORY','json') == 'memory' else JsonRepository()
+        if s.supabase_url and s.supabase_service_role_key:
+            from app.db.supabase import SupabaseRepository
+            _REPO = SupabaseRepository(s)
+        elif os.getenv('FINGUARD_REPOSITORY','json') == 'memory':
+            _REPO = InMemoryRepository()
+        else:
+            _REPO = JsonRepository()
     return _REPO
+
+def active_backend() -> str:
+    return getattr(get_repository(), 'backend', get_repository().__class__.__name__.lower())
+
 
 def paginate(items: Iterable[Any], page:int=1, page_size:int=50, sort:str|None=None, order:str='desc') -> dict[str, Any]:
     data=list(items); page=max(1,page); page_size=min(max(1,page_size),100)

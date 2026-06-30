@@ -3,14 +3,25 @@ from app.models.schemas import Role, User
 from app.core.config import get_settings
 from app.auth.rbac import can_access
 
-def current_user(x_finguard_role: str | None = Header(default=None), x_finguard_actor: str | None = Header(default=None)) -> User:
+
+def _user_from_headers(x_finguard_role: str | None, x_finguard_actor: str | None) -> User | None:
     if x_finguard_role is None:
-        if not get_settings().auth_required and get_settings().app_env != 'production':
-            return User(id='local-admin', email='local-admin@local', role=Role.admin)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Authentication required')
-    try: role = Role(x_finguard_role)
-    except ValueError: raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Invalid role')
+        return None
+    try:
+        role = Role(x_finguard_role)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Invalid role')
     return User(id=x_finguard_actor or role.value, email=f'{x_finguard_actor or role.value}@local', role=role)
+
+
+def current_user(x_finguard_role: str | None = Header(default=None), x_finguard_actor: str | None = Header(default=None)) -> User:
+    user = _user_from_headers(x_finguard_role, x_finguard_actor)
+    if user is not None:
+        return user
+    if not get_settings().auth_required and get_settings().app_env != 'production':
+        return User(id='local-admin', email='local-admin@local', role=Role.admin)
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Authentication required')
+
 
 def require(permission: str):
     def dep(user: User = Depends(current_user)):
@@ -18,3 +29,17 @@ def require(permission: str):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Insufficient permissions')
         return user
     return dep
+
+
+def require_chat_access(x_finguard_role: str | None = Header(default=None), x_finguard_actor: str | None = Header(default=None)) -> User | None:
+    settings = get_settings()
+    user = _user_from_headers(x_finguard_role, x_finguard_actor)
+    if user is None:
+        if settings.public_customer_chat:
+            return None
+        if not settings.auth_required and settings.app_env != 'production':
+            return User(id='local-admin', email='local-admin@local', role=Role.admin)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Authentication required')
+    if not can_access(user.role, 'chat:create'):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Insufficient permissions')
+    return user

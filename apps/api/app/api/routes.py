@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import StreamingResponse
 from app.agent.llm import ProviderConfigurationError, provider_from_name
 from app.agent.orchestrator import AgentOrchestrator
-from app.auth.deps import require
+from app.auth.deps import require, require_chat_access
 from app.core.config import get_settings, Settings
 from app.middleware.errors import error_response
 from app.models.schemas import *
@@ -12,7 +12,7 @@ from app.services.analytics import analytics_summary, insights_dashboard
 from app.services.audit import events
 from app.services.knowledge import create_article, delete_article, ingest_document, list_articles, search_articles, update_article
 from app.services.memory import conversations, history
-from app.services.repository import paginate
+from app.services.repository import active_backend, paginate
 from app.services.settings import get_app_settings, update_app_settings
 from app.services.tickets import create_ticket, list_tickets, update_ticket
 from app.services.feedback import classify_conversation, create_product_item, get_classification, list_classifications, list_product_items, product_dashboard
@@ -31,9 +31,9 @@ def orchestrator(settings: Settings = Depends(get_settings)) -> AgentOrchestrato
         raise HTTPException(status_code=503, detail={'reason':'AI provider is not configured','provider_error':str(exc)})
 
 @router.post('/chat', response_model=ChatResponse)
-async def chat(payload: ChatRequest, agent: AgentOrchestrator = Depends(orchestrator)): return await agent.handle_chat(payload.message, payload.conversation_id, payload.user_id)
+async def chat(payload: ChatRequest, agent: AgentOrchestrator = Depends(orchestrator), user=Depends(require_chat_access)): return await agent.handle_chat(payload.message, payload.conversation_id, payload.user_id)
 @router.post('/chat/stream')
-async def chat_stream(payload: ChatRequest, agent: AgentOrchestrator = Depends(orchestrator)):
+async def chat_stream(payload: ChatRequest, agent: AgentOrchestrator = Depends(orchestrator), user=Depends(require_chat_access)):
     async def gen():
         yield 'event: metadata\ndata: {"status":"started"}\n\n'
         try:
@@ -111,4 +111,4 @@ def admin_summary(user=Depends(require('admin:read'))):
 @router.get('/health')
 def health():
     s=get_app_settings(); degraded = s.active_ai_provider!='mock'
-    return {'status': 'degraded' if degraded else 'ok', 'version':'v1.0.0', 'provider': s.active_ai_provider, 'persistence':'configured' if get_settings().supabase_url else 'local'}
+    return {'status': 'degraded' if degraded else 'ok', 'version':'v1.0.0', 'provider': s.active_ai_provider, 'persistence': active_backend()}
