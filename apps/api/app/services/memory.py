@@ -47,13 +47,14 @@ def conversations() -> list[Conversation]: return list(_CONVERSATIONS.values())
 
 # Generic memory runtime: scoped key/value records with a provider-compatible shape.
 from app.models.schemas import MemoryRecord, MemoryRecordCreate, MemoryScope
+from app.services.policy import sanitize_sensitive
 _MEMORY_RECORDS: dict[str, MemoryRecord] = {}
 
 def upsert_memory_record(payload: MemoryRecordCreate) -> MemoryRecord:
     now = datetime.now(timezone.utc).isoformat()
     rid = f"{payload.scope}:{payload.workspace_id}:{payload.user_id or payload.session_id or 'global'}:{payload.key}"
     existing = _MEMORY_RECORDS.get(rid)
-    record = MemoryRecord(id=rid, scope=payload.scope, key=payload.key, value=payload.value, user_id=payload.user_id, session_id=payload.session_id, workspace_id=payload.workspace_id, created_at=existing.created_at if existing else now, updated_at=now)
+    record = MemoryRecord(id=rid, scope=payload.scope, key=payload.key, value=sanitize_sensitive(payload.value), user_id=payload.user_id, session_id=payload.session_id, workspace_id=payload.workspace_id, created_at=existing.created_at if existing else now, updated_at=now)
     _MEMORY_RECORDS[rid] = record
     try:
         from app.services.repository import get_repository

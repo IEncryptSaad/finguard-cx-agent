@@ -168,6 +168,24 @@ class EventPublishRequest(BaseModel):
 
 class EvaluationDataset(BaseModel):
     id: str | None = None; name: str; items: list[dict] = []; created_at: str | None = None
+
+    @field_validator("items")
+    @classmethod
+    def validate_items(cls, items: list[dict]) -> list[dict]:
+        validated = []
+        for item in items:
+            if not isinstance(item, dict):
+                raise ValueError("evaluation dataset items must be objects")
+            cleaned = dict(item)
+            for field in ("input", "expected"):
+                value = cleaned.get(field)
+                if not isinstance(value, str) or not value.strip():
+                    raise ValueError(f"evaluation dataset item.{field} must be a non-empty string")
+            actual = cleaned.get("actual")
+            if actual is not None and not isinstance(actual, str):
+                raise ValueError("evaluation dataset item.actual must be a string when provided")
+            validated.append(cleaned)
+        return validated
 class EvaluationRunRequest(BaseModel):
     dataset_id: str; provider: str = "mock"; benchmark: str = "quality"
 class EvaluationRun(BaseModel):

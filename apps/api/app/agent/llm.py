@@ -70,5 +70,7 @@ def route_provider(request) -> dict:
     if preferred:
         match = next((p for p in candidates if p['name'] == preferred), None)
         if match: return {'provider': match['name'], 'capability': request.capability, 'reason': 'preferred provider matched', 'failover': [p['name'] for p in candidates if p['name'] != match['name']]}
-    selected = next((p for p in candidates if p['name'] == 'mock'), candidates[0] if candidates else {'name':'mock'})
+    if not candidates:
+        return {'provider': '', 'capability': request.capability, 'reason': 'no route available', 'failover': []}
+    selected = next((p for p in candidates if p['name'] == 'mock'), candidates[0])
     return {'provider': selected['name'], 'capability': request.capability, 'reason': 'free-tier healthy failover route', 'failover': [p['name'] for p in candidates if p['name'] != selected['name']]}

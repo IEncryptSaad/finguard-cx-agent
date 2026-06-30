@@ -26,3 +26,48 @@ def test_platform_v1_provider_memory_action_prompt_event_evaluation_observabilit
     assert client.get('/api/v1/observability/health').status_code == 200
     cost = client.get('/api/v1/cost/usage')
     assert cost.status_code == 200 and cost.json()['estimated_cost'] == 0
+
+
+def test_provider_route_returns_no_route_when_capability_not_advertised():
+    client = TestClient(app)
+    response = client.post('/api/v1/providers/route', json={'capability': 'embedding'})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['provider'] == ''
+    assert payload['reason'] == 'no route available'
+    assert payload['failover'] == []
+
+
+def test_memory_records_are_sanitized_before_persistence():
+    client = TestClient(app)
+    sensitive = {
+        'api_key': 'sk-memory-api-key-123',
+        'password': 'memory-password-123',
+        'token': 'memory-token-123',
+        'email': 'user@example.com',
+        'phone': '+1 415-555-2671',
+        'card': '4111 1111 1111 1111',
+        'account': 'account number 1234567890',
+    }
+    response = client.post('/api/v1/memory', json={'scope': 'user', 'key': 'sensitive-regression', 'value': sensitive, 'user_id': 'sensitive-user'})
+    assert response.status_code == 200
+    body = response.text
+    records = client.get('/api/v1/memory?scope=user&user_id=sensitive-user')
+    assert records.status_code == 200
+    body += records.text
+    for secret in sensitive.values():
+        assert secret not in body
+    assert '[REDACTED' in body
+
+
+def test_evaluation_dataset_rejects_malformed_items():
+    client = TestClient(app)
+    malformed_payloads = [
+        {'name': 'missing-input', 'items': [{'expected': 'hello'}]},
+        {'name': 'missing-expected', 'items': [{'input': 'hello'}]},
+        {'name': 'invalid-input', 'items': [{'input': 123, 'expected': 'hello'}]},
+        {'name': 'invalid-actual', 'items': [{'input': 'hello', 'expected': 'hello', 'actual': 123}]},
+    ]
+    for payload in malformed_payloads:
+        response = client.post('/api/v1/evaluations/datasets', json=payload)
+        assert response.status_code == 422

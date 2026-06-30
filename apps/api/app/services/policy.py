@@ -1,6 +1,7 @@
 import re
 from app.services.guardrails import GuardrailDecision
-from app.services.security import redact_text
+from typing import Any
+from app.services.security import redact_text, sanitize
 CREDENTIAL_PLACEHOLDER = "[REDACTED_CREDENTIAL]"
 _CREDENTIAL_PATTERNS = [
     re.compile(
@@ -27,3 +28,21 @@ class PolicyEngine:
             return GuardrailDecision(False, True, "Credential handling requires secure workflow.")
         return decision
 policy_engine = PolicyEngine()
+
+def sanitize_sensitive(value: Any) -> Any:
+    if isinstance(value, str):
+        return redact_credentials(value)[0]
+    if isinstance(value, list):
+        return [sanitize_sensitive(v) for v in value]
+    if isinstance(value, tuple):
+        return tuple(sanitize_sensitive(v) for v in value)
+    if isinstance(value, dict):
+        sanitized: dict[str, Any] = {}
+        for key, item in value.items():
+            skey = str(key)
+            if isinstance(item, str) and re.search(r"(?:password|passcode|pin|api[_ -]?key|secret|token)", skey, re.I):
+                sanitized[skey] = redact_credentials(f"{skey} is {item}")[0].split(" ", 1)[-1]
+            else:
+                sanitized[skey] = sanitize_sensitive(item)
+        return sanitize(sanitized)
+    return value
