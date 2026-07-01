@@ -31,6 +31,20 @@ def require(permission: str):
     return dep
 
 
+def require_demo_admin_read(permission: str):
+    def dep(x_finguard_role: str | None = Header(default=None), x_finguard_actor: str | None = Header(default=None)):
+        user = _user_from_headers(x_finguard_role, x_finguard_actor)
+        if user is not None:
+            if not can_access(user.role, permission):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Insufficient permissions')
+            return user
+        settings = get_settings()
+        if settings.demo_admin_read_access:
+            return User(id='demo-admin-readonly', email='demo-admin-readonly@local', role=Role.agent)
+        return current_user(x_finguard_role, x_finguard_actor)
+    return dep
+
+
 def require_chat_access(x_finguard_role: str | None = Header(default=None), x_finguard_actor: str | None = Header(default=None)) -> User | None:
     settings = get_settings()
     user = _user_from_headers(x_finguard_role, x_finguard_actor)
