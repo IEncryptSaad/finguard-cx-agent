@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 export type Page<T> = { items:T[]; page:number; page_size:number; total:number };
 export type ChatResponse = { conversation_id: string; message: string; redacted: boolean; handoff_required: boolean; ticket_id?: string | null };
 export type Conversation = { id: string; user_id?: string | null; status: string; created_at: string; updated_at: string };
