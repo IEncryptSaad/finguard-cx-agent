@@ -25,7 +25,7 @@ def events() -> list[dict[str, Any]]:
             from app.services.repository import get_repository
             persisted = get_repository().list('audit_logs')
             _EVENTS[:0] = [event for event in persisted if not any(_same_event(event, existing) for existing in _EVENTS)]
+            _EVENTS_HYDRATED = True
         except Exception:
             pass
-        _EVENTS_HYDRATED = True
     return list(_EVENTS)

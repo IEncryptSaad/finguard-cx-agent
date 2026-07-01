@@ -354,6 +354,50 @@ def test_audit_events_hydrates_after_early_log_event_without_repeating(monkeypat
     assert list_calls == ['audit_logs']
 
 
+
+def test_audit_events_retries_hydration_after_repository_failure(monkeypatch):
+    from app.services import audit, repository
+
+    persisted = [
+        {
+            'event_type': 'persisted.event',
+            'payload': {'value': 1},
+            'created_at': '2026-07-01T00:00:00+00:00',
+        }
+    ]
+    list_calls = []
+    previous_repo = repository._REPO
+    previous_events = list(audit._EVENTS)
+    previous_hydrated = audit._EVENTS_HYDRATED
+
+    class FakeRepository:
+        def list(self, table):
+            list_calls.append(table)
+            if len(list_calls) == 1:
+                raise RuntimeError('transient repository failure')
+            return list(persisted)
+
+        def append(self, table, value):
+            return None
+
+    repository._REPO = FakeRepository()
+    audit._EVENTS.clear()
+    audit._EVENTS_HYDRATED = False
+    try:
+        failed_events = audit.events()
+        assert audit._EVENTS_HYDRATED is False
+
+        retried_events = audit.events()
+        assert audit._EVENTS_HYDRATED is True
+    finally:
+        repository._REPO = previous_repo
+        audit._EVENTS[:] = previous_events
+        audit._EVENTS_HYDRATED = previous_hydrated
+
+    assert failed_events == []
+    assert retried_events == persisted
+    assert list_calls == ['audit_logs', 'audit_logs']
+
 def test_anonymous_chat_auth_required_precedes_unconfigured_provider(monkeypatch):
     from app.core.config import get_settings
     from app.services import settings as settings_service
