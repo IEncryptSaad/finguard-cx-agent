@@ -16,12 +16,19 @@ def _persist():
 def _hydrate():
     try:
         from app.services.repository import get_repository
-        for c in get_repository().list('conversations'): _CONVERSATIONS[c['id']] = Conversation(**c)
-        _MESSAGES.extend(ConversationMessage(**m) for m in get_repository().list('conversation_messages'))
+        repo = get_repository()
+        for c in repo.list('conversations'):
+            _CONVERSATIONS[c['id']] = Conversation(**c)
+        existing_message_ids = {m.id for m in _MESSAGES}
+        for m in repo.list('conversation_messages'):
+            if m['id'] not in existing_message_ids:
+                _MESSAGES.append(ConversationMessage(**m))
+                existing_message_ids.add(m['id'])
     except Exception: pass
 _hydrate()
 
 def conversation_exists(conversation_id: str) -> bool:
+    _hydrate()
     return conversation_id in _CONVERSATIONS
 
 def get_or_create_conversation(conversation_id: str | None = None, user_id: str | None = None) -> Conversation:
@@ -41,9 +48,12 @@ def add_message(conversation_id: str, role: str, content: str) -> ConversationMe
     return msg
 
 def history(conversation_id: str) -> list[ConversationMessage]:
+    _hydrate()
     return [m for m in _MESSAGES if m.conversation_id == conversation_id]
 
-def conversations() -> list[Conversation]: return list(_CONVERSATIONS.values())
+def conversations() -> list[Conversation]:
+    _hydrate()
+    return list(_CONVERSATIONS.values())
 
 # Generic memory runtime: scoped key/value records with a provider-compatible shape.
 from app.models.schemas import MemoryRecord, MemoryRecordCreate, MemoryScope

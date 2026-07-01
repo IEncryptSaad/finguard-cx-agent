@@ -494,3 +494,82 @@ def test_supabase_repository_payload_matches_mvp_schema():
     )
     assert conversation_payload["id"] == "not-a-uuid-session"
     assert conversation_payload["user_id"] is None
+
+
+def test_admin_summary_reads_persisted_repository_conversations(monkeypatch):
+    from app.services import audit, memory, repository
+
+    class FakeRepository(repository.AppRepository):
+        backend = "fake"
+
+        def __init__(self):
+            self.tables = {
+                "conversations": {
+                    "persisted-admin-conversation": {
+                        "id": "persisted-admin-conversation",
+                        "user_id": None,
+                        "status": "open",
+                        "created_at": "2026-07-01T00:00:00Z",
+                        "updated_at": "2026-07-01T00:01:00Z",
+                    }
+                },
+                "conversation_messages": {
+                    "persisted-admin-message": {
+                        "id": "persisted-admin-message",
+                        "conversation_id": "persisted-admin-conversation",
+                        "role": "user",
+                        "content": "Persisted admin viewer message",
+                        "created_at": "2026-07-01T00:01:00Z",
+                    }
+                },
+                "audit_logs": [
+                    {
+                        "event_type": "chat.received",
+                        "payload": {"conversation_id": "persisted-admin-conversation"},
+                        "created_at": "2026-07-01T00:01:00Z",
+                    }
+                ],
+            }
+
+        def list(self, table: str):
+            data = self.tables.get(table, {})
+            return list(data.values()) if isinstance(data, dict) else list(data)
+
+        def put(self, table: str, key: str, value):
+            self.tables.setdefault(table, {})[key] = value
+
+        def append(self, table: str, value):
+            self.tables.setdefault(table, []).append(value)
+
+        def delete(self, table: str, key: str):
+            self.tables.setdefault(table, {}).pop(key, None)
+
+    previous_repo = repository._REPO
+    try:
+        repository._REPO = FakeRepository()
+        memory._CONVERSATIONS.clear()
+        memory._MESSAGES.clear()
+        audit._EVENTS.clear()
+        audit._EVENTS_HYDRATED = False
+
+        client = TestClient(app)
+        summary = client.get("/api/v1/admin/summary")
+        conversations = client.get("/api/v1/conversations")
+        messages = client.get("/api/v1/conversations/persisted-admin-conversation/messages")
+        audit_logs = client.get("/api/v1/audit")
+
+        assert summary.status_code == 200
+        assert summary.json()["total_conversations"] == 1
+        assert summary.json()["conversations"] == 1
+        assert conversations.status_code == 200
+        assert conversations.json()[0]["id"] == "persisted-admin-conversation"
+        assert messages.status_code == 200
+        assert messages.json()[0]["content"] == "Persisted admin viewer message"
+        assert audit_logs.status_code == 200
+        assert audit_logs.json()[0]["event_type"] == "chat.received"
+    finally:
+        repository._REPO = previous_repo
+        memory._CONVERSATIONS.clear()
+        memory._MESSAGES.clear()
+        audit._EVENTS.clear()
+        audit._EVENTS_HYDRATED = False
