@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import StreamingResponse
 from app.agent.llm import ProviderConfigurationError, provider_from_name
 from app.agent.orchestrator import AgentOrchestrator
-from app.auth.deps import require, require_chat_access
+from app.auth.deps import require, require_chat_access, require_demo_admin_read
 from app.core.config import get_settings, Settings
 from app.middleware.errors import error_response
 from app.models.schemas import *
@@ -46,7 +46,7 @@ async def chat_stream(payload: ChatRequest, user=Depends(require_chat_access), a
     return StreamingResponse(gen(), media_type='text/event-stream')
 
 @router.get('/conversations')
-def list_conversations(page:int=1,page_size:int=50,sort:str|None='updated_at',order:str='desc',paginated:bool=False, user=Depends(require('conversation:read'))): return _page(conversations(),page,page_size,sort,order,paginated)
+def list_conversations(page:int=1,page_size:int=50,sort:str|None='updated_at',order:str='desc',paginated:bool=False, user=Depends(require_demo_admin_read('conversation:read'))): return _page(conversations(),page,page_size,sort,order,paginated)
 @router.get('/conversations/{conversation_id}/messages')
 def conversation_messages(conversation_id: str, user=Depends(require('conversation:read'))): return history(conversation_id)
 @router.get('/tickets')
@@ -67,7 +67,7 @@ def knowledge_delete(article_id: str, user=Depends(require('knowledge:write'))):
 @router.post('/knowledge/ingest', response_model=KnowledgeArticle)
 async def knowledge_ingest(file: UploadFile = File(...), user=Depends(require('knowledge:write'))): return ingest_document(file.filename or 'document.txt', await file.read())
 @router.get('/audit')
-def audit(page:int=1,page_size:int=50,paginated:bool=False,user=Depends(require('audit:read'))): return _page(events(),page,page_size,'created_at','desc',paginated)
+def audit(page:int=1,page_size:int=50,paginated:bool=False,user=Depends(require_demo_admin_read('audit:read'))): return _page(events(),page,page_size,'created_at','desc',paginated)
 @router.get('/analytics')
 def analytics(user=Depends(require('analytics:read'))): return analytics_summary()
 @router.get('/plugins')
@@ -105,7 +105,7 @@ def settings_get(user=Depends(require('settings:read'))): return get_app_setting
 @router.put('/settings', response_model=AppSettings)
 def settings_put(payload: AppSettings, user=Depends(require('settings:write'))): return update_app_settings(payload)
 @router.get('/admin/summary')
-def admin_summary(user=Depends(require('admin:read'))):
+def admin_summary(user=Depends(require_demo_admin_read('admin:read'))):
     tickets = list_tickets(); audits=events(); convs=conversations(); analytics=analytics_summary()
     return {'open_tickets': len([t for t in tickets if t.status == 'open']), 'handoffs': len([t for t in tickets if t.priority in ('high','urgent')]), 'conversations': len(convs), 'audit_events': len(audits), 'knowledge_articles': len(list_articles()), **analytics}
 @router.get('/health')

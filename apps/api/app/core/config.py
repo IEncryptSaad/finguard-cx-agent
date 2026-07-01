@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = 60
     auth_required: bool = False
     public_customer_chat: bool = False
+    demo_admin_read_access: bool = False
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 @lru_cache
 def get_settings() -> Settings:

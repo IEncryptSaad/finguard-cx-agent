@@ -18,6 +18,36 @@ def test_production_auth_enforced_when_enabled(monkeypatch):
         get_settings.cache_clear()
 
 
+
+def test_demo_admin_read_access_allows_only_dashboard_reads(monkeypatch):
+    monkeypatch.setenv('AUTH_REQUIRED', 'true')
+    monkeypatch.setenv('APP_ENV', 'production')
+    monkeypatch.setenv('DEMO_ADMIN_READ_ACCESS', 'true')
+    from app.core.config import get_settings
+    get_settings.cache_clear()
+    try:
+        client = TestClient(app)
+        assert client.get('/api/v1/admin/summary').status_code == 200
+        assert client.get('/api/v1/conversations').status_code == 200
+        assert client.get('/api/v1/audit').status_code == 200
+
+        assert client.get('/api/v1/conversations/demo/messages').status_code == 401
+        assert client.post('/api/v1/tickets', json={
+            'conversation_id': 'demo',
+            'summary': 'must stay protected',
+            'priority': 'normal',
+        }).status_code == 401
+        assert client.put('/api/v1/settings', json={
+            'active_ai_provider':'mock','model_name':'mock-support-v1','temperature':0.2,'system_prompt':'safe',
+            'guardrails_enabled':True,'pii_redaction_enabled':True,'rate_limit_per_minute':60,
+            'enabled_plugins':['mock'],'knowledge_source_settings':{}
+        }).status_code == 401
+    finally:
+        monkeypatch.delenv('AUTH_REQUIRED', raising=False)
+        monkeypatch.delenv('APP_ENV', raising=False)
+        monkeypatch.delenv('DEMO_ADMIN_READ_ACCESS', raising=False)
+        get_settings.cache_clear()
+
 def test_customer_cannot_mutate_settings_when_auth_enabled(monkeypatch):
     monkeypatch.setenv('AUTH_REQUIRED', 'true')
     from app.core.config import get_settings
