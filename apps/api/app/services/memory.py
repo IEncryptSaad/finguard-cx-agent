@@ -4,55 +4,73 @@ from app.models.schemas import Conversation, ConversationMessage
 _CONVERSATIONS: dict[str, Conversation] = {}
 _MESSAGES: list[ConversationMessage] = []
 
-def _persist():
+
+def _repo():
+    from app.services.repository import get_repository
+    return get_repository()
+
+
+def _persist_conversation(conversation: Conversation) -> None:
     try:
-        from app.services.repository import get_repository
-        repo=get_repository()
-        for c in _CONVERSATIONS.values(): repo.put('conversations', c.id, c.model_dump())
-        # keep messages keyed by id for idempotence
-        for m in _MESSAGES: repo.put('conversation_messages', m.id, m.model_dump())
+        _repo().put('conversations', conversation.id, conversation.model_dump())
     except Exception: pass
 
-def _hydrate():
+
+def _persist_message(message: ConversationMessage) -> None:
     try:
-        from app.services.repository import get_repository
-        repo = get_repository()
-        for c in repo.list('conversations'):
-            _CONVERSATIONS[c['id']] = Conversation(**c)
-        existing_message_ids = {m.id for m in _MESSAGES}
-        for m in repo.list('conversation_messages'):
-            if m['id'] not in existing_message_ids:
-                _MESSAGES.append(ConversationMessage(**m))
-                existing_message_ids.add(m['id'])
+        _repo().put('conversation_messages', message.id, message.model_dump())
     except Exception: pass
-_hydrate()
+
+
+def _hydrate_conversations() -> None:
+    try:
+        for c in _repo().list('conversations'):
+            _CONVERSATIONS[c['id']] = Conversation(**c)
+    except Exception: pass
+
+
+def _hydrate_messages(conversation_id: str) -> None:
+    try:
+        existing_message_ids = {m.id for m in _MESSAGES}
+        for m in _repo().list('conversation_messages'):
+            if m.get('conversation_id') != conversation_id or m['id'] in existing_message_ids:
+                continue
+            _MESSAGES.append(ConversationMessage(**m))
+            existing_message_ids.add(m['id'])
+    except Exception: pass
+
+_hydrate_conversations()
 
 def conversation_exists(conversation_id: str) -> bool:
-    _hydrate()
+    _hydrate_conversations()
     return conversation_id in _CONVERSATIONS
 
 def get_or_create_conversation(conversation_id: str | None = None, user_id: str | None = None) -> Conversation:
+    _hydrate_conversations()
     cid = conversation_id or str(uuid4())
     conv = _CONVERSATIONS.get(cid)
     if not conv:
         now = datetime.now(timezone.utc).isoformat()
         conv = Conversation(id=cid, user_id=user_id, status="open", created_at=now, updated_at=now)
-        _CONVERSATIONS[cid] = conv; _persist()
+        _CONVERSATIONS[cid] = conv; _persist_conversation(conv)
     return conv
 
 def add_message(conversation_id: str, role: str, content: str) -> ConversationMessage:
     msg = ConversationMessage(id=str(uuid4()), conversation_id=conversation_id, role=role, content=content, created_at=datetime.now(timezone.utc).isoformat())
     _MESSAGES.append(msg)
-    if conversation_id in _CONVERSATIONS: _CONVERSATIONS[conversation_id].updated_at = msg.created_at
-    _persist()
+    if conversation_id in _CONVERSATIONS:
+        _CONVERSATIONS[conversation_id].updated_at = msg.created_at
+        _persist_conversation(_CONVERSATIONS[conversation_id])
+    _persist_message(msg)
     return msg
 
 def history(conversation_id: str) -> list[ConversationMessage]:
-    _hydrate()
+    _hydrate_conversations()
+    _hydrate_messages(conversation_id)
     return [m for m in _MESSAGES if m.conversation_id == conversation_id]
 
 def conversations() -> list[Conversation]:
-    _hydrate()
+    _hydrate_conversations()
     return list(_CONVERSATIONS.values())
 
 # Generic memory runtime: scoped key/value records with a provider-compatible shape.

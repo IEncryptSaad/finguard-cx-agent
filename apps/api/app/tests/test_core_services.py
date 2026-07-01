@@ -573,3 +573,127 @@ def test_admin_summary_reads_persisted_repository_conversations(monkeypatch):
         memory._MESSAGES.clear()
         audit._EVENTS.clear()
         audit._EVENTS_HYDRATED = False
+
+
+def test_admin_listing_does_not_hydrate_all_persisted_messages(monkeypatch):
+    from app.services import memory, repository
+
+    class FakeRepository(repository.AppRepository):
+        backend = "fake"
+
+        def __init__(self):
+            self.tables = {
+                "conversations": {
+                    "admin-listing-conversation": {
+                        "id": "admin-listing-conversation",
+                        "user_id": None,
+                        "status": "open",
+                        "created_at": "2026-07-01T00:00:00Z",
+                        "updated_at": "2026-07-01T00:01:00Z",
+                    }
+                },
+                "conversation_messages": {
+                    f"historical-message-{i}": {
+                        "id": f"historical-message-{i}",
+                        "conversation_id": "admin-listing-conversation",
+                        "role": "user",
+                        "content": f"Historical message {i}",
+                        "created_at": f"2026-07-01T00:0{i}:00Z",
+                    }
+                    for i in range(3)
+                },
+            }
+
+        def list(self, table: str):
+            data = self.tables.get(table, {})
+            return list(data.values()) if isinstance(data, dict) else list(data)
+
+        def put(self, table: str, key: str, value):
+            self.tables.setdefault(table, {})[key] = value
+
+        def append(self, table: str, value):
+            self.tables.setdefault(table, []).append(value)
+
+        def delete(self, table: str, key: str):
+            self.tables.setdefault(table, {}).pop(key, None)
+
+    previous_repo = repository._REPO
+    try:
+        repository._REPO = FakeRepository()
+        memory._CONVERSATIONS.clear()
+        memory._MESSAGES.clear()
+
+        client = TestClient(app)
+        response = client.get("/api/v1/conversations")
+
+        assert response.status_code == 200
+        assert response.json()[0]["id"] == "admin-listing-conversation"
+        assert memory._MESSAGES == []
+    finally:
+        repository._REPO = previous_repo
+        memory._CONVERSATIONS.clear()
+        memory._MESSAGES.clear()
+
+
+def test_add_message_after_admin_listing_persists_only_new_message(monkeypatch):
+    from app.services import memory, repository
+
+    class FakeRepository(repository.AppRepository):
+        backend = "fake"
+
+        def __init__(self):
+            self.message_puts = []
+            self.tables = {
+                "conversations": {
+                    "write-through-conversation": {
+                        "id": "write-through-conversation",
+                        "user_id": None,
+                        "status": "open",
+                        "created_at": "2026-07-01T00:00:00Z",
+                        "updated_at": "2026-07-01T00:01:00Z",
+                    }
+                },
+                "conversation_messages": {
+                    f"historical-write-through-message-{i}": {
+                        "id": f"historical-write-through-message-{i}",
+                        "conversation_id": "write-through-conversation",
+                        "role": "user",
+                        "content": f"Historical message {i}",
+                        "created_at": f"2026-07-01T00:0{i}:00Z",
+                    }
+                    for i in range(3)
+                },
+            }
+
+        def list(self, table: str):
+            data = self.tables.get(table, {})
+            return list(data.values()) if isinstance(data, dict) else list(data)
+
+        def put(self, table: str, key: str, value):
+            self.tables.setdefault(table, {})[key] = value
+            if table == "conversation_messages":
+                self.message_puts.append(key)
+
+        def append(self, table: str, value):
+            self.tables.setdefault(table, []).append(value)
+
+        def delete(self, table: str, key: str):
+            self.tables.setdefault(table, {}).pop(key, None)
+
+    previous_repo = repository._REPO
+    fake_repo = FakeRepository()
+    try:
+        repository._REPO = fake_repo
+        memory._CONVERSATIONS.clear()
+        memory._MESSAGES.clear()
+
+        client = TestClient(app)
+        assert client.get("/api/v1/conversations").status_code == 200
+        msg = memory.add_message("write-through-conversation", "agent", "Only persist this new message")
+
+        assert fake_repo.message_puts == [msg.id]
+        assert all(not key.startswith("historical-write-through-message") for key in fake_repo.message_puts)
+    finally:
+        repository._REPO = previous_repo
+        memory._CONVERSATIONS.clear()
+        memory._MESSAGES.clear()
