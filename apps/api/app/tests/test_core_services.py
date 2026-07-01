@@ -478,6 +478,8 @@ def test_supabase_repository_payload_matches_mvp_schema():
         "summary": "Need help",
         "status": "open",
         "priority": "normal",
+        "assignee": "agent-1",
+        "internal_notes": ["private"],
     }
 
     audit_payload = repo._clean_payload(

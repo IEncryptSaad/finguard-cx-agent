@@ -215,11 +215,13 @@ def test_supabase_put_keeps_upsert_resolution_headers(monkeypatch):
     monkeypatch.setattr(supabase.request, 'urlopen', fake_urlopen)
     repo = SupabaseRepository(Settings(supabase_url='https://example.supabase.co', supabase_service_role_key='service-role'))
 
-    repo.put('tickets', 'ticket-1', {'summary': 'hello'})
+    repo.put('tickets', 'ticket-1', {'summary': 'hello', 'assignee': 'agent-1', 'internal_notes': ['note']})
 
     assert captured['url'] == 'https://example.supabase.co/rest/v1/tickets?on_conflict=id'
     assert captured['prefer'] == 'return=minimal,resolution=merge-duplicates'
     assert captured['body']['id'] == 'ticket-1'
+    assert captured['body']['assignee'] == 'agent-1'
+    assert captured['body']['internal_notes'] == ['note']
 
 
 def test_audit_log_supabase_append_allows_database_id_default(monkeypatch):
@@ -265,6 +267,91 @@ def test_audit_log_supabase_append_allows_database_id_default(monkeypatch):
     assert 'resolution=merge-duplicates' not in captured['prefer']
     assert captured['body']['event_type'] == 'review_test'
     assert 'id' not in captured['body']
+
+
+def test_ticket_update_persists_assignee_and_internal_notes_through_repository(monkeypatch):
+    from app.models.schemas import Ticket
+    from app.services import repository
+    from app.services import tickets as ticket_service
+
+    captured = {}
+    previous_repo = repository._REPO
+    previous_tickets = dict(ticket_service._TICKETS)
+
+    class FakeRepository:
+        def put(self, table, key, value):
+            captured['table'] = table
+            captured['key'] = key
+            captured['value'] = value
+
+        def append(self, table, value):
+            return None
+
+    repository._REPO = FakeRepository()
+    ticket_service._TICKETS.clear()
+    ticket_service._TICKETS['ticket-1'] = Ticket(
+        id='ticket-1',
+        conversation_id='conversation-1',
+        summary='Need help',
+    )
+    try:
+        updated = ticket_service.update_ticket(
+            'ticket-1',
+            assignee='agent-1',
+            internal_note='private note',
+        )
+    finally:
+        repository._REPO = previous_repo
+        ticket_service._TICKETS.clear()
+        ticket_service._TICKETS.update(previous_tickets)
+
+    assert updated.assignee == 'agent-1'
+    assert updated.internal_notes == ['private note']
+    assert captured['table'] == 'tickets'
+    assert captured['key'] == 'ticket-1'
+    assert captured['value']['assignee'] == 'agent-1'
+    assert captured['value']['internal_notes'] == ['private note']
+
+
+def test_audit_events_hydrates_after_early_log_event_without_repeating(monkeypatch):
+    from app.services import audit, repository
+
+    persisted = [
+        {
+            'event_type': 'persisted.event',
+            'payload': {'value': 1},
+            'created_at': '2026-07-01T00:00:00+00:00',
+        }
+    ]
+    list_calls = []
+    previous_repo = repository._REPO
+    previous_events = list(audit._EVENTS)
+    previous_hydrated = audit._EVENTS_HYDRATED
+
+    class FakeRepository:
+        def list(self, table):
+            list_calls.append(table)
+            return list(persisted)
+
+        def append(self, table, value):
+            persisted.append(value)
+
+    repository._REPO = FakeRepository()
+    audit._EVENTS.clear()
+    audit._EVENTS_HYDRATED = False
+    try:
+        early_event = audit.log_event('early.event', {'value': 2})
+
+        first_events = audit.events()
+        second_events = audit.events()
+    finally:
+        repository._REPO = previous_repo
+        audit._EVENTS[:] = previous_events
+        audit._EVENTS_HYDRATED = previous_hydrated
+
+    assert first_events == [persisted[0], early_event]
+    assert second_events == first_events
+    assert list_calls == ['audit_logs']
 
 
 def test_anonymous_chat_auth_required_precedes_unconfigured_provider(monkeypatch):
