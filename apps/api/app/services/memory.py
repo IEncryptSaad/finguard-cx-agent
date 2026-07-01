@@ -67,7 +67,10 @@ def add_message(conversation_id: str, role: str, content: str) -> ConversationMe
 def history(conversation_id: str) -> list[ConversationMessage]:
     _hydrate_conversations()
     _hydrate_messages(conversation_id)
-    return [m for m in _MESSAGES if m.conversation_id == conversation_id]
+    return sorted(
+        (m for m in _MESSAGES if m.conversation_id == conversation_id),
+        key=lambda m: m.created_at,
+    )
 
 def conversations() -> list[Conversation]:
     _hydrate_conversations()

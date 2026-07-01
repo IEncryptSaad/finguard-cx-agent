@@ -496,6 +496,137 @@ def test_supabase_repository_payload_matches_mvp_schema():
     assert conversation_payload["user_id"] is None
 
 
+class RecordingLLMProvider(MockLLMProvider):
+    def __init__(self):
+        self.prompts = []
+
+    async def complete(self, prompt: str, *, system_prompt: str | None = None) -> str:
+        self.prompts.append(prompt)
+        return await super().complete(prompt, system_prompt=system_prompt)
+
+
+def test_continuing_persisted_conversation_hydrates_before_prompt_window(monkeypatch):
+    from app.services import memory, repository
+
+    class FakeRepository(repository.AppRepository):
+        backend = "fake"
+
+        def __init__(self):
+            self.tables = {
+                "conversations": {
+                    "persisted-chat-conversation": {
+                        "id": "persisted-chat-conversation",
+                        "user_id": None,
+                        "status": "open",
+                        "created_at": "2026-07-01T00:00:00Z",
+                        "updated_at": "2026-07-01T00:09:00Z",
+                    }
+                },
+                "conversation_messages": {
+                    f"persisted-chat-message-{i}": {
+                        "id": f"persisted-chat-message-{i}",
+                        "conversation_id": "persisted-chat-conversation",
+                        "role": "customer",
+                        "content": f"Older persisted message {i}",
+                        "created_at": f"2026-07-01T00:0{i}:00Z",
+                    }
+                    for i in range(9)
+                },
+            }
+
+        def list(self, table: str):
+            data = self.tables.get(table, {})
+            return list(data.values()) if isinstance(data, dict) else list(data)
+
+        def put(self, table: str, key: str, value):
+            self.tables.setdefault(table, {})[key] = value
+
+        def append(self, table: str, value):
+            self.tables.setdefault(table, []).append(value)
+
+        def delete(self, table: str, key: str):
+            self.tables.setdefault(table, {}).pop(key, None)
+
+    previous_repo = repository._REPO
+    provider = RecordingLLMProvider()
+    try:
+        repository._REPO = FakeRepository()
+        memory._CONVERSATIONS.clear()
+        memory._MESSAGES.clear()
+
+        asyncio.run(AgentOrchestrator(provider).handle_chat("Newest customer request", conversation_id="persisted-chat-conversation"))
+
+        assert provider.prompts
+        assert "customer: Newest customer request" in provider.prompts[0]
+    finally:
+        repository._REPO = previous_repo
+        memory._CONVERSATIONS.clear()
+        memory._MESSAGES.clear()
+
+
+def test_history_tail_includes_newest_customer_message_with_eight_plus_persisted_messages(monkeypatch):
+    from app.services import memory, repository
+
+    class FakeRepository(repository.AppRepository):
+        backend = "fake"
+
+        def __init__(self):
+            self.message_puts = []
+            self.tables = {
+                "conversations": {
+                    "history-window-conversation": {
+                        "id": "history-window-conversation",
+                        "user_id": None,
+                        "status": "open",
+                        "created_at": "2026-07-01T00:00:00Z",
+                        "updated_at": "2026-07-01T00:09:00Z",
+                    }
+                },
+                "conversation_messages": {
+                    f"history-window-message-{i}": {
+                        "id": f"history-window-message-{i}",
+                        "conversation_id": "history-window-conversation",
+                        "role": "customer",
+                        "content": f"Older history message {i}",
+                        "created_at": f"2026-07-01T00:0{i}:00Z",
+                    }
+                    for i in range(9)
+                },
+            }
+
+        def list(self, table: str):
+            data = self.tables.get(table, {})
+            return list(data.values()) if isinstance(data, dict) else list(data)
+
+        def put(self, table: str, key: str, value):
+            self.tables.setdefault(table, {})[key] = value
+            if table == "conversation_messages":
+                self.message_puts.append(key)
+
+        def append(self, table: str, value):
+            self.tables.setdefault(table, []).append(value)
+
+        def delete(self, table: str, key: str):
+            self.tables.setdefault(table, {}).pop(key, None)
+
+    previous_repo = repository._REPO
+    fake_repo = FakeRepository()
+    try:
+        repository._REPO = fake_repo
+        memory._CONVERSATIONS.clear()
+        memory._MESSAGES.clear()
+
+        msg = memory.add_message("history-window-conversation", "customer", "Newest history request")
+        tail = memory.history("history-window-conversation")[-8:]
+
+        assert tail[-1].id == msg.id
+        assert tail[-1].content == "Newest history request"
+        assert fake_repo.message_puts == [msg.id]
+    finally:
+        repository._REPO = previous_repo
+        memory._CONVERSATIONS.clear()
+        memory._MESSAGES.clear()
+
 def test_admin_summary_reads_persisted_repository_conversations(monkeypatch):
     from app.services import audit, memory, repository
 
