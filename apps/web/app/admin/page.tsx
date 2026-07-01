@@ -1,4 +1,4 @@
-import { getAdminSummary, getAuditLogs, getConversations, getFeedback, getInsights, getKnowledge, getMarketplace, getPlugins, getRoadmap, getSettings, getTickets, getWorkflows } from '@/lib/api';
+import { getAdminSummary, getAuditLogs, getConversations, getFeedback, getInsights, getKnowledge, getMarketplace, getPlugins, getRoadmap, getSettings, getTickets, getWorkflows } from '../../lib/api';
 export default async function Admin(){
   const [summary, conversations, tickets, audits, articles, settings, plugins, workflows, roadmap, feedback, insights, marketplace] = await Promise.all([getAdminSummary().catch(()=>({})), getConversations().catch(()=>[]), getTickets().catch(()=>[]), getAuditLogs().catch(()=>[]), getKnowledge().catch(()=>[]), getSettings().catch(()=>null), getPlugins().catch(()=>[]), getWorkflows().catch(()=>[]), getRoadmap().catch(()=>[]), getFeedback().catch(()=>[]), getInsights().catch(()=>({})), getMarketplace().catch(()=>[])]);
   const data = summary as Record<string, unknown>;

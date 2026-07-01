@@ -1,6 +1,6 @@
 'use client';
 import { FormEvent, useState } from 'react';
-import { createTicket, sendChat, streamChat } from '@/lib/api';
+import { createTicket, sendChat, streamChat } from '../lib/api';
 type Msg = { role: 'customer' | 'agent'; text: string; ticket?: string | null };
 function friendlyError(e: unknown){ const m=e instanceof Error?e.message:''; if(m.includes('429')) return 'Too many requests. Please wait a minute and retry.'; if(m.includes('422')) return 'Please check your message and try again.'; if(m.includes('Failed to fetch')) return 'Network error. Check your connection.'; return 'Server error. Please retry or request human support.'; }
 export function ChatShell() {
