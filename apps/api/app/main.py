@@ -10,8 +10,8 @@ from app.middleware.rate_limit import rate_limit_middleware
 from app.middleware.security_headers import security_headers_middleware
 from app.services.repository import get_repository
 
-CORS_METHODS = ["OPTIONS", "GET", "POST", "PUT", "PATCH", "DELETE"]
-CORS_HEADERS = ["Authorization", "Content-Type", "X-FinGuard-Actor", "X-FinGuard-Role"]
+CORS_METHODS = ["*"]
+CORS_HEADERS = ["*"]
 LOCALHOST_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
 
