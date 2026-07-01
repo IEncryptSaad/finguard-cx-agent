@@ -111,7 +111,7 @@ def test_rejected_preflight_identifies_starlette_cors_origin_failure(monkeypatch
     logged = {}
 
     def capture_warning(message, *args, **kwargs):
-        logged["message"] = message
+        logged["message"] = message % args
         logged.update(kwargs.get("extra", {}))
 
     monkeypatch.setattr("app.middleware.cors.logger.warning", capture_warning)
@@ -123,11 +123,14 @@ def test_rejected_preflight_identifies_starlette_cors_origin_failure(monkeypatch
         assert response.status_code == 400
         assert response.text == "Disallowed CORS origin"
         assert logged == {
-            "message": "CORS preflight rejected",
+            "message": "CORS preflight rejected origin=https://evil.example "
+            "requested_method=POST requested_headers=Content-Type, Authorization "
+            "reason=Disallowed CORS origin path=/api/v1/chat",
             "origin": "https://evil.example",
             "access_control_request_method": "POST",
             "access_control_request_headers": "Content-Type, Authorization",
             "reason": "Disallowed CORS origin",
+            "path": "/api/v1/chat",
         }
     finally:
         monkeypatch.delenv("APP_ENV", raising=False)
