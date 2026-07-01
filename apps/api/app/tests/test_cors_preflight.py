@@ -104,3 +104,34 @@ def test_localhost_preflight_still_works_in_development(monkeypatch):
         monkeypatch.delenv("SUPABASE_URL", raising=False)
         monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
         get_settings.cache_clear()
+
+
+def test_rejected_preflight_identifies_starlette_cors_origin_failure(monkeypatch):
+    app, get_settings = load_app(monkeypatch, "https://finguard-cx.vercel.app")
+    logged = {}
+
+    def capture_warning(message, *args, **kwargs):
+        logged["message"] = message
+        logged.update(kwargs.get("extra", {}))
+
+    monkeypatch.setattr("app.middleware.cors.logger.warning", capture_warning)
+    try:
+        client = TestClient(app)
+
+        response = preflight(client, "/api/v1/chat", "https://evil.example")
+
+        assert response.status_code == 400
+        assert response.text == "Disallowed CORS origin"
+        assert logged == {
+            "message": "CORS preflight rejected",
+            "origin": "https://evil.example",
+            "access_control_request_method": "POST",
+            "access_control_request_headers": "Content-Type, Authorization",
+            "reason": "Disallowed CORS origin",
+        }
+    finally:
+        monkeypatch.delenv("APP_ENV", raising=False)
+        monkeypatch.delenv("CORS_ORIGINS", raising=False)
+        monkeypatch.delenv("SUPABASE_URL", raising=False)
+        monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
+        get_settings.cache_clear()

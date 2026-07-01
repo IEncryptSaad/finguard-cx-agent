@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.exceptions import RequestValidationError
-from fastapi.middleware.cors import CORSMiddleware
+from app.middleware.cors import LoggingCORSMiddleware
 from app.api.routes import router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
@@ -34,7 +34,7 @@ app.middleware("http")(error_middleware)
 app.middleware("http")(security_headers_middleware)
 app.middleware("http")(rate_limit_middleware(settings.rate_limit_per_minute, 60))
 app.add_middleware(
-    CORSMiddleware,
+    LoggingCORSMiddleware,
     allow_origins=parse_cors_origins(settings.cors_origins, settings.app_env),
     allow_credentials=True,
     allow_methods=CORS_METHODS,
