@@ -470,6 +470,7 @@ def test_supabase_repository_payload_matches_mvp_schema():
             "priority": "normal",
             "assignee": "agent-1",
             "internal_notes": ["private"],
+            "updated_at": "2026-07-01T00:00:00Z",
         },
     )
     assert ticket_payload == {
@@ -480,6 +481,7 @@ def test_supabase_repository_payload_matches_mvp_schema():
         "priority": "normal",
         "assignee": "agent-1",
         "internal_notes": ["private"],
+        "updated_at": "2026-07-01T00:00:00Z",
     }
 
     audit_payload = repo._clean_payload(
@@ -828,3 +830,95 @@ def test_add_message_after_admin_listing_persists_only_new_message(monkeypatch):
         repository._REPO = previous_repo
         memory._CONVERSATIONS.clear()
         memory._MESSAGES.clear()
+
+
+def test_public_chat_ticket_creation_redacts_sensitive_summary_before_admin_display():
+    client = TestClient(app)
+    sensitive = {
+        "card": "4111 1111 1111 1111",
+        "account": "account number ACC-123456789",
+        "password": "hunter2-ticket-password-123",
+        "token": "tok-ticket-secret-123",
+        "otp": "123456",
+    }
+    summary = (
+        f"Card {sensitive['card']} {sensitive['account']} "
+        f"password is {sensitive['password']} token is {sensitive['token']} otp is {sensitive['otp']}"
+    )
+
+    created = client.post(
+        "/api/v1/chat/tickets",
+        json={"conversation_id": "public-redaction-conversation", "summary": summary, "priority": "normal"},
+    )
+
+    assert created.status_code == 200
+    created_text = created.text
+    assert "[REDACTED]" in created_text
+    assert CREDENTIAL_PLACEHOLDER in created_text
+    for raw in sensitive.values():
+        assert raw not in created_text
+
+    listed = client.get("/api/v1/tickets")
+    assert listed.status_code == 200
+    ticket = next(t for t in listed.json() if t["id"] == created.json()["id"])
+    assert ticket["summary"] == created.json()["summary"]
+    for raw in sensitive.values():
+        assert raw not in ticket["summary"]
+
+
+def test_authenticated_ticket_creation_keeps_summary_unchanged():
+    client = TestClient(app)
+    summary = "Internal reviewer note token is tok-internal-unchanged-123"
+
+    created = client.post(
+        "/api/v1/tickets",
+        json={"conversation_id": "internal-ticket-conversation", "summary": summary, "priority": "normal"},
+    )
+
+    assert created.status_code == 200
+    assert created.json()["summary"] == summary
+
+
+def test_ticket_updated_at_survives_supabase_cleaning_persistence_and_hydration(monkeypatch):
+    from app.core.config import Settings
+    from app.db.supabase import SupabaseRepository
+    from app.services import repository, tickets as ticket_service
+
+    class SupabaseLikeRepository(repository.AppRepository):
+        backend = "supabase-like"
+
+        def __init__(self):
+            self.tables = {"tickets": {}}
+            self.cleaner = SupabaseRepository(Settings(supabase_url="https://example.supabase.co", supabase_service_role_key="test-key"))
+
+        def list(self, table: str):
+            return list(self.tables.get(table, {}).values())
+
+        def put(self, table: str, key: str, value):
+            self.tables.setdefault(table, {})[key] = self.cleaner._clean_payload(table, dict(value))
+
+        def append(self, table: str, value):
+            self.tables.setdefault(table, []).append(value)
+
+        def delete(self, table: str, key: str):
+            self.tables.setdefault(table, {}).pop(key, None)
+
+    fake_repo = SupabaseLikeRepository()
+    monkeypatch.setattr(repository, "get_repository", lambda: fake_repo)
+    original_tickets = dict(ticket_service._TICKETS)
+    ticket_service._TICKETS.clear()
+    try:
+        ticket = ticket_service.create_ticket("supabase-updated-at-conversation", "Need help")
+        original_updated_at = ticket.updated_at
+        updated = ticket_service.update_ticket(ticket.id, status="pending")
+
+        assert updated.updated_at != original_updated_at
+        assert fake_repo.tables["tickets"][ticket.id]["updated_at"] == updated.updated_at
+
+        ticket_service._TICKETS.clear()
+        ticket_service._hydrate()
+
+        assert ticket_service._TICKETS[ticket.id].updated_at == updated.updated_at
+    finally:
+        ticket_service._TICKETS.clear()
+        ticket_service._TICKETS.update(original_tickets)
