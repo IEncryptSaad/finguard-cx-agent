@@ -3,10 +3,10 @@ from app.services.guardrails import GuardrailDecision
 from typing import Any
 from app.services.security import redact_text, sanitize
 CREDENTIAL_PLACEHOLDER = "[REDACTED_CREDENTIAL]"
-_CREDENTIAL_KEY_PATTERN = re.compile(r"(?:password|passcode|pin|otp|one[_ -]?time[_ -]?code|api[_ -]?key|secret|token|private[_ -]?key)", re.IGNORECASE)
+_CREDENTIAL_KEY_PATTERN = re.compile(r"(?:password|passcode|pin|otp(?:[_ -]?code)?|one[_ -]?time[_ -]?(?:code|password)|api[_ -]?key|secret|token|private[_ -]?key)", re.IGNORECASE)
 _CREDENTIAL_PATTERNS = [
     re.compile(
-        r"\b((?:reset\s+)?(?:password|passcode|pin|otp|one[_ -]?time[_ -]?code)|api[_ -]?key|secret|token)\b"
+        r"\b((?:reset\s+)?(?:password|passcode|pin|otp(?:\s+code)?|one[_ -]?time[_ -]?(?:code|password))|api[_ -]?key|secret|token)\b"
         r"\s*(?:(?:is|as|to|for)\b|[:=])?\s*\S+",
         re.IGNORECASE,
     ),

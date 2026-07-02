@@ -29,6 +29,10 @@ def test_credential_redaction_consumes_common_connectors():
         "reset password is reset-test-password-123": "reset-test-password-123",
         "secret is secret-test-value-123": "secret-test-value-123",
         "password is hunter2-test-password-123": "hunter2-test-password-123",
+        "OTP code 123456": "123456",
+        "otp code: 123456": "123456",
+        "OTP 123456": "123456",
+        "one time password 123456": "123456",
     }
 
     for message, secret in examples.items():
@@ -864,6 +868,37 @@ def test_public_chat_ticket_creation_redacts_sensitive_summary_before_admin_disp
     assert ticket["summary"] == created.json()["summary"]
     for raw in sensitive.values():
         assert raw not in ticket["summary"]
+
+
+def test_public_chat_ticket_creation_redacts_otp_code_summary_before_admin_display():
+    client = TestClient(app)
+    examples = [
+        "OTP code 123456",
+        "otp code: 123456",
+        "OTP 123456",
+        "one time password 123456",
+    ]
+
+    for index, summary in enumerate(examples):
+        created = client.post(
+            "/api/v1/chat/tickets",
+            json={
+                "conversation_id": f"public-otp-redaction-conversation-{index}",
+                "summary": summary,
+                "priority": "normal",
+            },
+        )
+
+        assert created.status_code == 200
+        assert "123456" not in created.json()["summary"]
+        assert CREDENTIAL_PLACEHOLDER in created.json()["summary"]
+
+        listed = client.get("/api/v1/tickets")
+        assert listed.status_code == 200
+        ticket = next(t for t in listed.json() if t["id"] == created.json()["id"])
+        assert ticket["summary"] == created.json()["summary"]
+        assert "123456" not in ticket["summary"]
+        assert CREDENTIAL_PLACEHOLDER in ticket["summary"]
 
 
 def test_authenticated_ticket_creation_keeps_summary_unchanged():
