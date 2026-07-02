@@ -27,16 +27,54 @@ def test_demo_admin_read_access_allows_only_dashboard_reads(monkeypatch):
     get_settings.cache_clear()
     try:
         client = TestClient(app)
-        assert client.get('/api/v1/admin/summary').status_code == 200
-        assert client.get('/api/v1/conversations').status_code == 200
-        assert client.get('/api/v1/audit').status_code == 200
+        dashboard_read_paths = [
+            '/api/v1/admin/summary',
+            '/api/v1/conversations',
+            '/api/v1/conversations/demo/messages',
+            '/api/v1/audit',
+            '/api/v1/tickets',
+            '/api/v1/knowledge',
+            '/api/v1/settings',
+            '/api/v1/plugins',
+            '/api/v1/workflows',
+            '/api/v1/roadmap',
+            '/api/v1/feedback',
+            '/api/v1/analytics/insights',
+            '/api/v1/marketplace',
+        ]
+        for path in dashboard_read_paths:
+            assert client.get(path).status_code == 200, path
 
-        assert client.get('/api/v1/conversations/demo/messages').status_code == 401
         assert client.post('/api/v1/tickets', json={
             'conversation_id': 'demo',
             'summary': 'must stay protected',
             'priority': 'normal',
         }).status_code == 401
+        assert client.post('/api/v1/knowledge', json={
+            'title': 'private',
+            'body': 'must stay protected',
+            'tags': [],
+        }).status_code == 401
+        assert client.post('/api/v1/workflows', json={
+            'name': 'protected',
+            'trigger': 'manual',
+            'conditions': [],
+            'actions': [],
+            'retry_policy': {},
+            'status': 'draft',
+        }).status_code == 401
+        assert client.post('/api/v1/roadmap', json={
+            'type': 'feature',
+            'title': 'protected',
+            'description': 'must stay protected',
+            'status': 'open',
+            'priority': 'normal',
+            'labels': [],
+            'linked_conversations': [],
+            'attachments': [],
+        }).status_code == 401
+        assert client.post('/api/v1/feedback/conversations/demo/classify').status_code == 401
+        assert client.post('/api/v1/marketplace/install', json={'name': 'demo'}).status_code == 401
         assert client.put('/api/v1/settings', json={
             'active_ai_provider':'mock','model_name':'mock-support-v1','temperature':0.2,'system_prompt':'safe',
             'guardrails_enabled':True,'pii_redaction_enabled':True,'rate_limit_per_minute':60,
@@ -46,6 +84,37 @@ def test_demo_admin_read_access_allows_only_dashboard_reads(monkeypatch):
         monkeypatch.delenv('AUTH_REQUIRED', raising=False)
         monkeypatch.delenv('APP_ENV', raising=False)
         monkeypatch.delenv('DEMO_ADMIN_READ_ACCESS', raising=False)
+        get_settings.cache_clear()
+
+
+def test_dashboard_reads_require_auth_when_demo_admin_read_access_disabled(monkeypatch):
+    monkeypatch.setenv('AUTH_REQUIRED', 'true')
+    monkeypatch.setenv('APP_ENV', 'production')
+    monkeypatch.delenv('DEMO_ADMIN_READ_ACCESS', raising=False)
+    from app.core.config import get_settings
+    get_settings.cache_clear()
+    try:
+        client = TestClient(app)
+        protected_read_paths = [
+            '/api/v1/admin/summary',
+            '/api/v1/conversations',
+            '/api/v1/conversations/demo/messages',
+            '/api/v1/audit',
+            '/api/v1/tickets',
+            '/api/v1/knowledge',
+            '/api/v1/settings',
+            '/api/v1/plugins',
+            '/api/v1/workflows',
+            '/api/v1/roadmap',
+            '/api/v1/feedback',
+            '/api/v1/analytics/insights',
+            '/api/v1/marketplace',
+        ]
+        for path in protected_read_paths:
+            assert client.get(path).status_code == 401, path
+    finally:
+        monkeypatch.delenv('AUTH_REQUIRED', raising=False)
+        monkeypatch.delenv('APP_ENV', raising=False)
         get_settings.cache_clear()
 
 def test_customer_cannot_mutate_settings_when_auth_enabled(monkeypatch):
