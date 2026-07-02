@@ -3,6 +3,9 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, status as http_status
 from app.models.schemas import Ticket
 from app.services.audit import log_event
+from app.services.pii import redact_pii
+from app.services.policy import redact_credentials
+from app.services.settings import get_app_settings
 _TICKETS: dict[str, Ticket] = {}
 
 def _persist(ticket: Ticket):
@@ -17,6 +20,12 @@ def _hydrate():
         for t in get_repository().list('tickets'): _TICKETS[t['id']] = Ticket(**t)
     except Exception: pass
 _hydrate()
+def redact_ticket_summary(summary: str) -> str:
+    credential_clean, _ = redact_credentials(summary)
+    if get_app_settings().pii_redaction_enabled:
+        return redact_pii(credential_clean)[0]
+    return credential_clean
+
 def create_ticket(conversation_id: str, summary: str, priority: str = "normal") -> Ticket:
     now = datetime.now(timezone.utc).isoformat()
     ticket = Ticket(id=str(uuid4()), conversation_id=conversation_id, summary=summary, priority=priority, status="open", created_at=now, updated_at=now)

@@ -14,7 +14,7 @@ from app.services.knowledge import create_article, delete_article, ingest_docume
 from app.services.memory import conversations, history
 from app.services.repository import active_backend, paginate
 from app.services.settings import get_app_settings, update_app_settings
-from app.services.tickets import create_ticket, list_tickets, update_ticket
+from app.services.tickets import create_ticket, list_tickets, redact_ticket_summary, update_ticket
 from app.services.feedback import classify_conversation, create_product_item, get_classification, list_classifications, list_product_items, product_dashboard
 from app.services.internal_assistant import answer_internal
 from app.services.marketplace import install_plugin, list_marketplace
@@ -56,7 +56,7 @@ def tickets(page:int=1,page_size:int=50,status:str|None=None,priority:str|None=N
 def ticket(payload: TicketCreate, user=Depends(require('ticket:create'))): return create_ticket(payload.conversation_id, payload.summary, payload.priority)
 @router.post('/chat/tickets')
 def chat_ticket(payload: TicketCreate, user=Depends(require_chat_access)):
-    return create_ticket(payload.conversation_id, payload.summary, payload.priority)
+    return create_ticket(payload.conversation_id, redact_ticket_summary(payload.summary), payload.priority)
 @router.patch('/tickets/{ticket_id}')
 def ticket_update(ticket_id: str, payload: TicketUpdate, user=Depends(require('ticket:update'))): return update_ticket(ticket_id, status=payload.status, priority=payload.priority, summary=payload.summary, assignee=payload.assignee, internal_note=payload.internal_note)
 @router.get('/knowledge', response_model=list[KnowledgeArticle]|dict)

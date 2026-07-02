@@ -12,7 +12,7 @@ from app.services.repository import AppRepository, RepositoryError
 _TABLE_COLUMNS: dict[str, set[str]] = {
     'conversations': {'id', 'user_id', 'status', 'created_at', 'updated_at', 'workspace_id'},
     'conversation_messages': {'id', 'conversation_id', 'role', 'content', 'created_at'},
-    'tickets': {'id', 'conversation_id', 'summary', 'status', 'priority', 'assignee', 'internal_notes', 'created_at'},
+    'tickets': {'id', 'conversation_id', 'summary', 'status', 'priority', 'assignee', 'internal_notes', 'created_at', 'updated_at'},
     'audit_logs': {'id', 'event_type', 'payload', 'created_at'},
     'knowledge_articles': {'id', 'title', 'body', 'tags', 'created_at', 'updated_at'},
     'memory_records': {'id', 'scope', 'key', 'value', 'user_id', 'session_id', 'workspace_id', 'created_at', 'updated_at'},
