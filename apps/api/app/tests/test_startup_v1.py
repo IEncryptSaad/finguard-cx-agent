@@ -34,16 +34,24 @@ def test_demo_admin_read_access_allows_only_dashboard_reads(monkeypatch):
             '/api/v1/audit',
             '/api/v1/tickets',
             '/api/v1/knowledge',
-            '/api/v1/settings',
-            '/api/v1/plugins',
-            '/api/v1/workflows',
-            '/api/v1/roadmap',
-            '/api/v1/feedback',
+            '/api/v1/analytics',
             '/api/v1/analytics/insights',
-            '/api/v1/marketplace',
         ]
         for path in dashboard_read_paths:
             assert client.get(path).status_code == 200, path
+
+        sensitive_read_paths = [
+            '/api/v1/settings',
+            '/api/v1/plugins',
+            '/api/v1/providers',
+            '/api/v1/connectors',
+            '/api/v1/workflows',
+            '/api/v1/roadmap',
+            '/api/v1/feedback',
+            '/api/v1/marketplace',
+        ]
+        for path in sensitive_read_paths:
+            assert client.get(path).status_code == 401, path
 
         assert client.post('/api/v1/tickets', json={
             'conversation_id': 'demo',
@@ -107,6 +115,7 @@ def test_dashboard_reads_require_auth_when_demo_admin_read_access_disabled(monke
             '/api/v1/workflows',
             '/api/v1/roadmap',
             '/api/v1/feedback',
+            '/api/v1/analytics',
             '/api/v1/analytics/insights',
             '/api/v1/marketplace',
         ]

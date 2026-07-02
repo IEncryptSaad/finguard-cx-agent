@@ -5,11 +5,6 @@ export type Conversation = { id: string; user_id?: string | null; status: string
 export type Message = { id: string; conversation_id: string; role: string; content: string; created_at: string };
 export type Ticket = { id: string; conversation_id: string; summary: string; status: string; priority: string };
 export type KnowledgeArticle = { id: string; title: string; body: string; tags: string[] };
-export type AppSettings = { active_ai_provider:string; model_name:string; temperature:number; system_prompt:string; guardrails_enabled:boolean; pii_redaction_enabled:boolean; rate_limit_per_minute:number; enabled_plugins:string[]; knowledge_source_settings: Record<string, unknown> };
-export type Workflow = { id:string; name:string; trigger:string; conditions:Record<string, unknown>[]; actions:Record<string, unknown>[]; retry_policy:Record<string, unknown>; status:string; created_at:string; updated_at:string };
-export type ProductItem = { id:string; type:string; title:string; description:string; status:string; priority:string; labels:string[]; owner?:string|null; linked_conversations:string[]; attachments:string[]; ai_summary:string; ai_priority_suggestion:string; duplicate_of?:string|null; created_at:string; updated_at:string };
-export type FeedbackClassification = { id:string; conversation_id:string; category:string; sentiment:string; summary:string; recommended_action:string; confidence_score:number; created_at:string };
-export type MarketplacePlugin = { name:string; kind:string; enabled:boolean; description:string };
 async function json<T>(path: string, init?: RequestInit): Promise<T> { const r = await fetch(`${API_BASE}${path}`, { cache: 'no-store', ...init }); if (!r.ok) { const body = await r.text().catch(()=>''); throw new Error(`${path}: ${r.status} ${body}`); } return r.json(); }
 const withPage = (path:string) => `${path}${path.includes('?') ? '&' : '?'}paginated=true&page_size=50`;
 const unwrap = async <T>(p: Promise<T[]|Page<T>>) => { const r = await p; return Array.isArray(r) ? r : r.items; };
@@ -24,11 +19,4 @@ export const getTickets = () => unwrap(json<Ticket[]|Page<Ticket>>(withPage('/ap
 export const updateTicket = (id:string, payload: Partial<Ticket>) => json<Ticket>(`/api/v1/tickets/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
 export const getKnowledge = (q?: string) => unwrap(json<KnowledgeArticle[]|Page<KnowledgeArticle>>(withPage(`/api/v1/knowledge${q ? `?q=${encodeURIComponent(q)}` : ''}`)));
 export const getMessages = (id:string) => json<Message[]>(`/api/v1/conversations/${id}/messages`);
-export const getSettings = () => json<AppSettings>('/api/v1/settings');
-export const getPlugins = () => json<Array<{name:string; enabled:boolean; description:string; type:string}>>('/api/v1/plugins');
-export const getWorkflows = () => unwrap(json<Workflow[]|Page<Workflow>>(withPage('/api/v1/workflows')));
-export const getRoadmap = () => unwrap(json<ProductItem[]|Page<ProductItem>>(withPage('/api/v1/roadmap')));
-export const getRoadmapDashboard = () => json<Record<string, ProductItem[]>>('/api/v1/roadmap/dashboard');
-export const getFeedback = () => unwrap(json<FeedbackClassification[]|Page<FeedbackClassification>>(withPage('/api/v1/feedback')));
-export const getMarketplace = () => json<MarketplacePlugin[]>('/api/v1/marketplace');
 export const createTicket = (conversation_id: string, summary: string) => json<Ticket>('/api/v1/tickets', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({conversation_id, summary}) });
