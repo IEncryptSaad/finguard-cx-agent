@@ -1,24 +1,35 @@
+import AdminDashboard from '../../components/AdminDashboard';
 import { getAdminSummary, getAnalytics, getAuditLogs, getConversations, getInsights, getKnowledge, getMessages, getTickets } from '../../lib/api';
+import type { Conversation, KnowledgeArticle, Ticket } from '../../lib/api';
 
-const formatDate = (value?: string | null) => value ? new Date(value).toLocaleString() : '—';
-const badge = (value?: string) => <span className="rounded-full border border-slate-700 bg-slate-950 px-2 py-1 text-xs capitalize text-slate-200">{value ?? 'unknown'}</span>;
-const empty = (label: string) => <p className="mt-4 rounded-xl border border-dashed border-slate-700 p-4 text-sm text-slate-400">{label}</p>;
+type AuditLog = { event_type: string; payload: Record<string, unknown>; created_at: string };
 
-export default async function Admin(){
-  const [summary, analytics, conversations, tickets, audits, articles, insights] = await Promise.all([
-    getAdminSummary().catch(()=>({})), getAnalytics().catch(()=>({})), getConversations().catch(()=>[]), getTickets().catch(()=>[]), getAuditLogs().catch(()=>[]), getKnowledge().catch(()=>[]), getInsights().catch(()=>({}))
+export default async function Admin() {
+  const settled = await Promise.allSettled([
+    getAdminSummary(),
+    getAnalytics(),
+    getConversations(),
+    getTickets(),
+    getAuditLogs(),
+    getKnowledge(),
+    getInsights(),
   ]);
-  const recentMessages = await Promise.all(conversations.slice(0, 10).map(async (conversation) => ({ conversationId: conversation.id, messages: await getMessages(conversation.id).catch(() => []) })));
-  const messageByConversation = new Map(recentMessages.map((item) => [item.conversationId, item.messages]));
-  const data = { ...(analytics as Record<string, unknown>), ...(summary as Record<string, unknown>) };
-  const metrics = [
-    ['total_conversations','Conversations'], ['open_tickets','Open tickets'], ['resolved_tickets','Resolved'], ['escalated_tickets','Escalated'], ['average_response_time_ms','Avg response ms'], ['knowledge_articles','Knowledge articles']
-  ];
-  const insightCards = Object.entries(insights as Record<string, unknown>).slice(0, 6);
-  return <main className="min-h-screen p-4 sm:p-8"><div className="mx-auto max-w-7xl"><h1 className="text-3xl font-bold">Admin Dashboard</h1><p className="mt-2 text-slate-300">Read-only demo supervisor console for conversations, tickets, audit events, analytics, and knowledge.</p>
-    <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">{metrics.map(([k,label])=><div key={k} className="rounded-2xl border border-slate-800 bg-slate-900 p-5"><p className="text-sm uppercase tracking-wide text-slate-400">{label}</p><p className="mt-2 text-3xl font-bold">{String(data[k] ?? 0)}</p></div>)}</div>
-    <div className="mt-8 grid gap-6 xl:grid-cols-2"><section className="rounded-2xl border border-slate-800 bg-slate-900 p-5"><h2 className="text-xl font-semibold">Conversation viewer</h2>{conversations.length === 0 ? empty('No conversations yet. Send a chat message to populate this view.') : <div className="mt-4 space-y-4">{conversations.map(c=>{ const messages = messageByConversation.get(c.id) ?? []; const lastMessage = messages.at(-1); return <article key={c.id} className="rounded-xl border border-slate-800 bg-slate-950/60 p-4"><div className="flex flex-wrap items-center gap-2 text-sm"><code className="text-blue-300">{c.id}</code>{badge(c.status)}<span className="text-slate-400">Created {formatDate(c.created_at)}</span><span className="text-slate-400">Messages {messages.length}</span></div>{lastMessage ? <p className="mt-3 rounded-lg bg-slate-900 p-3 text-sm text-slate-300"><span className="font-semibold capitalize text-slate-100">{lastMessage.role}:</span> {lastMessage.content}</p> : <p className="mt-3 text-sm text-slate-500">No messages loaded for this conversation.</p>}</article>;})}</div>}</section>
-    <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 p-5"><h2 className="text-xl font-semibold">Tickets</h2>{tickets.length === 0 ? empty('No tickets have been created yet.') : <div className="mt-4 overflow-x-auto"><table className="min-w-full text-left text-sm"><thead className="text-slate-400"><tr><th className="p-2">Ticket</th><th className="p-2">Status</th><th className="p-2">Priority</th><th className="p-2">Assignee</th><th className="p-2">Created</th><th className="p-2">Summary</th></tr></thead><tbody>{tickets.map(t=><tr key={t.id} className="border-t border-slate-800"><td className="p-2 font-mono text-blue-300">{t.id.slice(0,8)}</td><td className="p-2">{badge(t.status)}</td><td className="p-2">{badge(t.priority)}</td><td className="p-2 text-slate-300">{t.assignee ?? 'Unassigned'}</td><td className="p-2 text-slate-400">{formatDate(t.created_at)}</td><td className="p-2 text-slate-300">{t.summary}</td></tr>)}</tbody></table></div>}</section>
-    <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5"><h2 className="text-xl font-semibold">Audit logs</h2>{audits.length === 0 ? empty('No audit events recorded yet.') : <div className="mt-4 space-y-3">{audits.slice(0, 12).map((a,i)=><article key={`${a.created_at}-${i}`} className="rounded-xl bg-slate-950/60 p-3 text-sm"><p className="font-semibold text-slate-100">{a.event_type}</p><p className="text-slate-400">{formatDate(a.created_at)}</p><p className="mt-1 text-slate-300">{Object.entries(a.payload ?? {}).map(([k,v])=>`${k}: ${String(v)}`).join(' · ') || 'No additional details'}</p></article>)}</div>}</section>
-    <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5"><h2 className="text-xl font-semibold">Knowledge management</h2>{articles.length === 0 ? empty('No knowledge articles available.') : <div className="mt-4 space-y-4">{articles.map(a=><article key={a.id} className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 text-sm"><div className="flex flex-wrap items-center gap-2"><b className="text-base text-slate-100">{a.title}</b>{a.tags.map(tag=><span key={tag} className="rounded-full bg-blue-950 px-2 py-1 text-xs text-blue-200">{tag}</span>)}</div><p className="mt-1 text-xs text-slate-500">Updated {formatDate(a.updated_at)}</p><p className="mt-3 text-slate-300">{a.body.slice(0,220)}{a.body.length > 220 ? '…' : ''}</p></article>)}</div>}<p className="mt-4 text-xs text-slate-500">Read-only article preview. Uploads and paid embeddings are intentionally out of scope for this demo.</p></section></div>
-    <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-5"><h2 className="text-xl font-semibold">Operational analytics</h2><div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">{insightCards.length === 0 ? empty('No analytics data is available yet.') : insightCards.map(([key,value])=><div key={key} className="rounded-xl bg-slate-950/60 p-4"><p className="text-sm uppercase text-slate-400">{key.replaceAll('_',' ')}</p><p className="mt-2 text-sm text-slate-200">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</p></div>)}</div></section></div></main> }
+  const [summary, analytics, conversations, tickets, audits, articles, insights] = settled.map((result) => result.status === 'fulfilled' ? result.value : undefined);
+  const safeConversations = (Array.isArray(conversations) ? conversations : []) as Conversation[];
+  const recentMessages = await Promise.all(safeConversations.slice(0, 25).map(async (conversation) => ({
+    conversationId: conversation.id,
+    messages: await getMessages(conversation.id).catch(() => []),
+  })));
+
+  return <AdminDashboard
+    summary={(summary as Record<string, unknown>) ?? {}}
+    analytics={(analytics as Record<string, unknown>) ?? {}}
+    conversations={safeConversations}
+    tickets={(Array.isArray(tickets) ? tickets : []) as Ticket[]}
+    audits={(Array.isArray(audits) ? audits : []) as AuditLog[]}
+    articles={(Array.isArray(articles) ? articles : []) as KnowledgeArticle[]}
+    insights={(insights as Record<string, unknown>) ?? {}}
+    messageByConversation={Object.fromEntries(recentMessages.map((item) => [item.conversationId, item.messages]))}
+    loadError={settled.some((result) => result.status === 'rejected')}
+  />;
+}
