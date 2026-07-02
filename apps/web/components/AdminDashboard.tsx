@@ -21,7 +21,11 @@ type Props = {
 const formatDate = (value?: string | null) => {
   if (!value) return '—';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat('en-US', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'UTC',
+  }).format(date);
 };
 
 const asNumber = (value: unknown, fallback = 0) => {
@@ -31,6 +35,42 @@ const asNumber = (value: unknown, fallback = 0) => {
 
 const compact = (value: unknown) => new Intl.NumberFormat('en', { notation: 'compact' }).format(asNumber(value));
 const truncate = (value = '', length = 150) => value.length > length ? `${value.slice(0, length).trim()}…` : value;
+
+const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const entriesFromCountMap = (value: unknown) => isRecord(value)
+  ? Object.entries(value).map(([label, count]) => [label, asNumber(count)] as [string, number]).filter(([, count]) => count > 0)
+  : [];
+
+const entriesFromStringList = (value: unknown) => {
+  if (!Array.isArray(value)) return [];
+  const counts = new Map<string, number>();
+  value.forEach((item) => {
+    if (typeof item !== 'string' || !item.trim()) return;
+    const label = item.trim();
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  });
+  return Array.from(counts.entries());
+};
+
+const knowledgeGapLabel = (value: unknown) => {
+  if (typeof value === 'string') return value.trim();
+  if (!isRecord(value)) return '';
+  const label = value.query ?? value.search_query ?? value.term ?? value.question ?? value.topic ?? value.category ?? value.id;
+  return typeof label === 'string' ? label.trim() : '';
+};
+
+const entriesFromKnowledgeGaps = (value: unknown) => {
+  if (isRecord(value)) return entriesFromCountMap(value);
+  if (!Array.isArray(value)) return [];
+  const counts = new Map<string, number>();
+  value.forEach((item) => {
+    const label = knowledgeGapLabel(item);
+    if (!label) return;
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  });
+  return Array.from(counts.entries());
+};
 
 const badgeTone = (value?: string) => {
   const normalized = value?.toLowerCase() ?? '';
@@ -78,9 +118,9 @@ export default function AdminDashboard({ summary, analytics, conversations, tick
     const haystack = [conversation.id, conversation.status, ...messages.flatMap((message) => [message.role, message.content])].join(' ').toLowerCase();
     return haystack.includes(query.toLowerCase());
   }), [conversations, messageByConversation, query]);
-  const categories = Object.entries((insights.top_complaint_categories ?? insights.complaint_categories ?? {}) as Record<string, number>).slice(0, 5);
-  const gaps = Object.entries((insights.knowledge_gaps ?? {}) as Record<string, number>).slice(0, 5);
-  const providerUsage = Object.entries((analytics.provider_usage ?? insights.provider_usage ?? { mock: conversations.length }) as Record<string, number>).slice(0, 4);
+  const categories = entriesFromStringList(analytics.top_complaints ?? insights.top_complaints).slice(0, 5);
+  const gaps = entriesFromKnowledgeGaps(analytics.knowledge_gaps ?? insights.knowledge_gaps).slice(0, 5);
+  const providerUsage = entriesFromCountMap(analytics.ai_provider_usage ?? insights.ai_provider_usage).slice(0, 4);
   const maxChart = Math.max(1, ...categories.map(([, v]) => asNumber(v)), ...gaps.map(([, v]) => asNumber(v)), ...providerUsage.map(([, v]) => asNumber(v)));
 
   return <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(14,165,233,0.18),transparent_34rem)] px-4 py-6 sm:px-8"><div className="mx-auto max-w-7xl space-y-8">
@@ -91,6 +131,6 @@ export default function AdminDashboard({ summary, analytics, conversations, tick
     <Section id="tickets" eyebrow="Case operations" title="Tickets">{tickets.length === 0 ? <EmptyState title="No tickets yet" body="Escalations and created support cases will appear here." /> : <div className="overflow-hidden rounded-2xl border border-slate-800"><div className="overflow-x-auto"><table className="min-w-full divide-y divide-slate-800 text-left text-sm"><thead className="bg-slate-950/80 text-xs uppercase tracking-wide text-slate-500"><tr>{['Ticket','Status','Priority','Assignee','Created','Summary'].map((head) => <th key={head} className="px-4 py-3 font-semibold">{head}</th>)}</tr></thead><tbody className="divide-y divide-slate-800 bg-slate-950/35">{tickets.map((ticket) => <tr key={ticket.id} className="transition hover:bg-slate-900"><td className="px-4 py-4 font-mono text-sky-300">{ticket.id.slice(0, 8)}</td><td className="px-4 py-4"><Badge value={ticket.status} /></td><td className="px-4 py-4"><Badge value={ticket.priority} /></td><td className="px-4 py-4 text-slate-300">{ticket.assignee || 'Unassigned'}</td><td className="px-4 py-4 text-slate-400">{formatDate(ticket.created_at)}</td><td className="max-w-xs px-4 py-4 text-slate-300">{truncate(ticket.summary, 90)}</td></tr>)}</tbody></table></div></div>}</Section></div>
     <div className="grid gap-6 xl:grid-cols-2"><Section id="audit-logs" eyebrow="Governance" title="Audit logs">{audits.length === 0 ? <EmptyState title="No audit events" body="Safe operational events will render as a timeline when available." /> : <div className="space-y-3">{audits.slice(0, 14).map((audit, index) => { const ref = String(audit.payload?.conversation_id ?? audit.payload?.ticket_id ?? audit.payload?.id ?? '—'); const metadata = Object.entries(audit.payload ?? {}).filter(([key]) => !['system_prompt','provider_config','secret','connector_config'].includes(key)).slice(0, 3).map(([key, value]) => `${key}: ${String(value)}`).join(' · '); return <article key={`${audit.created_at}-${index}`} className="flex gap-4 rounded-2xl border border-slate-800 bg-slate-950/50 p-4"><span className={`mt-1 h-3 w-3 shrink-0 rounded-full ${badgeTone(audit.event_type).includes('rose') ? 'bg-rose-400' : 'bg-sky-400'}`} /><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="font-semibold text-white">{audit.event_type.replaceAll('_', ' ')}</p><Badge value={audit.event_type.includes('error') ? 'attention' : 'recorded'} /></div><p className="mt-1 text-xs text-slate-500">{formatDate(audit.created_at)} · Ref {ref}</p><p className="mt-2 truncate text-sm text-slate-300">{metadata || 'No additional safe metadata available'}</p></div></article>; })}</div>}</Section>
     <Section id="knowledge" eyebrow="Content coverage" title="Knowledge base">{articles.length === 0 ? <EmptyState title="No knowledge articles" body="Approved help content will appear as read-only article cards." /> : <div className="grid gap-4 sm:grid-cols-2">{articles.map((article) => <article key={article.id} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4"><h3 className="font-semibold text-white">{article.title}</h3><div className="mt-3 flex flex-wrap gap-2">{article.tags.map((tag) => <span key={tag} className="rounded-full bg-sky-400/10 px-2.5 py-1 text-xs text-sky-200">{tag}</span>)}</div><p className="mt-3 text-xs text-slate-500">Updated {formatDate(article.updated_at)}</p><p className="mt-3 text-sm leading-6 text-slate-300">{truncate(article.body, 180)}</p></article>)}</div>}<p className="mt-4 text-xs text-slate-500">Read-only preview. Uploads, paid embeddings, secrets, and connector settings are intentionally hidden.</p></Section></div>
-    <Section id="analytics" eyebrow="Performance" title="Operational analytics"><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4"><article className="rounded-2xl bg-slate-950/60 p-4"><p className="text-sm text-slate-400">Conversation count</p><p className="mt-2 text-3xl font-bold">{compact(data.total_conversations ?? conversations.length)}</p></article><article className="rounded-2xl bg-slate-950/60 p-4"><p className="text-sm text-slate-400">Ticket count</p><p className="mt-2 text-3xl font-bold">{compact(totalTickets)}</p></article><article className="rounded-2xl bg-slate-950/60 p-4"><p className="text-sm text-slate-400">Escalation rate</p><p className="mt-2 text-3xl font-bold">{escalationRate}%</p></article><article className="rounded-2xl bg-slate-950/60 p-4"><p className="text-sm text-slate-400">Response time</p><p className="mt-2 text-3xl font-bold">{avgResponse}</p></article></div><div className="mt-5 grid gap-5 lg:grid-cols-3"><div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4"><h3 className="font-semibold">Provider usage</h3><div className="mt-4 space-y-3">{providerUsage.map(([label, value]) => <MiniBar key={label} label={label} value={asNumber(value)} max={maxChart} />)}</div></div><div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4"><h3 className="font-semibold">Top complaint categories</h3><div className="mt-4 space-y-3">{categories.length ? categories.map(([label, value]) => <MiniBar key={label} label={label} value={asNumber(value)} max={maxChart} />) : <p className="text-sm text-slate-500">No category trends yet.</p>}</div></div><div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4"><h3 className="font-semibold">Knowledge gaps</h3><div className="mt-4 space-y-3">{gaps.length ? gaps.map(([label, value]) => <MiniBar key={label} label={label} value={asNumber(value)} max={maxChart} />) : <p className="text-sm text-slate-500">No gaps detected in current demo data.</p>}</div></div></div></Section>
+    <Section id="analytics" eyebrow="Performance" title="Operational analytics"><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4"><article className="rounded-2xl bg-slate-950/60 p-4"><p className="text-sm text-slate-400">Conversation count</p><p className="mt-2 text-3xl font-bold">{compact(data.total_conversations ?? conversations.length)}</p></article><article className="rounded-2xl bg-slate-950/60 p-4"><p className="text-sm text-slate-400">Ticket count</p><p className="mt-2 text-3xl font-bold">{compact(totalTickets)}</p></article><article className="rounded-2xl bg-slate-950/60 p-4"><p className="text-sm text-slate-400">Escalation rate</p><p className="mt-2 text-3xl font-bold">{escalationRate}%</p></article><article className="rounded-2xl bg-slate-950/60 p-4"><p className="text-sm text-slate-400">Response time</p><p className="mt-2 text-3xl font-bold">{avgResponse}</p></article></div><div className="mt-5 grid gap-5 lg:grid-cols-3"><div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4"><h3 className="font-semibold">Provider usage</h3><div className="mt-4 space-y-3">{providerUsage.length ? providerUsage.map(([label, value]) => <MiniBar key={label} label={label} value={asNumber(value)} max={maxChart} />) : <p className="text-sm text-slate-500">No provider usage yet.</p>}</div></div><div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4"><h3 className="font-semibold">Top complaint categories</h3><div className="mt-4 space-y-3">{categories.length ? categories.map(([label, value]) => <MiniBar key={label} label={label} value={asNumber(value)} max={maxChart} />) : <p className="text-sm text-slate-500">No category trends yet.</p>}</div></div><div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4"><h3 className="font-semibold">Knowledge gaps</h3><div className="mt-4 space-y-3">{gaps.length ? gaps.map(([label, value]) => <MiniBar key={label} label={label} value={asNumber(value)} max={maxChart} />) : <p className="text-sm text-slate-500">No gaps detected in current demo data.</p>}</div></div></div></Section>
   </div></main>;
 }
